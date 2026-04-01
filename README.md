@@ -2,6 +2,15 @@
 
 A lightweight, purely client-side questionnaire app driven by a YAML file. All questionnaire content lives in the YAML — the HTML/CSS/JS files are generic and reusable for any survey.
 
+## Live demo (GitHub Pages)
+
+The example survey is hosted at:
+
+- **Questionnaire (respondent view):** https://hengxiao.github.io/QuestionnaireHelper/questionnaire.html?yaml=example.yaml
+- **Answer reader (organizer view):** https://hengxiao.github.io/QuestionnaireHelper/reader.html?yaml=example.yaml
+
+To use the app with your own YAML, host it alongside the HTML files and pass `?yaml=your-file.yaml` in the URL.
+
 ## How it works
 
 | File | Role |
