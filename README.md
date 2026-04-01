@@ -155,3 +155,19 @@ npm test
 ```
 
 101 tests cover the questionnaire form, the answer reader, and the YAML validator.
+
+---
+
+## AI agent skills
+
+The repo ships with skill/instruction files for all major AI coding assistants. When you open this repo in any of them, they already understand the YAML schema and can compose questionnaire files for you.
+
+| Tool | File | How to use |
+|------|------|-----------|
+| **Claude Code** | `.claude/commands/new-questionnaire.md` | Type `/new-questionnaire <description>` |
+| **GitHub Copilot** | `.github/copilot-instructions.md` | Ask Copilot to "create a questionnaire YAML for…" |
+| **Cursor** | `.cursor/rules/questionnaire-yaml.mdc` | Applied automatically when editing `.yaml` files |
+| **OpenAI Codex** | `AGENTS.md` | Loaded automatically before any task |
+| **Windsurf** | `.windsurf/rules/questionnaire-yaml.md` | Applied automatically when editing `.yaml` files |
+
+All skill files teach the agent the YAML schema, TextValue bilingual format, validation rules, and ID conventions — so generated YAMLs are valid on the first try.

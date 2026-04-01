@@ -1,0 +1,73 @@
+---
+description: Rules for creating and editing questionnaire YAML files in this repo
+globs:
+  - "*.yaml"
+  - "*.yml"
+alwaysApply: false
+---
+
+# QuestionnaireHelper — YAML authoring rules
+
+This project is a generic client-side questionnaire app. Survey content lives entirely in YAML files loaded via `?yaml=<file>` URL parameter.
+
+## Schema
+
+```yaml
+meta:
+  title: TextValue          # required
+  organization: TextValue   # optional
+  description: TextValue    # optional
+
+sections:                   # required, non-empty array
+  - id: "1"                 # required, unique string
+    title: TextValue        # required
+    description: TextValue  # optional
+    questions:              # required, non-empty array
+      - id: "Q1.1"          # required, globally unique across ALL questions
+        title: TextValue    # required
+        context: TextValue  # optional — framing shown below the title
+        prompts:            # optional — array of TextValue bullet points
+          - TextValue
+
+summary:                    # optional — rendered with a dark header
+  title: TextValue          # required if present
+  description: TextValue    # optional
+  questions:
+    - id: "S1"
+      title: TextValue
+```
+
+## TextValue
+
+```yaml
+# Plain string:
+title: "How do you rate the experience?"
+
+# Bilingual object (triggers language switcher in the UI):
+title:
+  en: "How do you rate the experience?"
+  zh: "您如何评价这次体验？"
+```
+
+Any ISO language key is valid. Use bilingual objects consistently — if one field is bilingual, make all fields bilingual.
+
+## Rules
+
+1. `meta.title` is required and non-empty.
+2. `sections` must be a non-empty array.
+3. Every `section.id` must be unique among sections.
+4. Every `question.id` must be **globally unique** across all sections **and** the summary.
+5. `prompts` must be an **array** (never a plain string).
+6. The `summary` block is optional; omit it entirely if not needed.
+
+## ID conventions
+
+| Scope | Pattern | Examples |
+|-------|---------|---------|
+| Sections | sequential integers | `"1"`, `"2"`, `"3"` |
+| Section questions | `Q<section>.<number>` | `"Q1.1"`, `"Q2.3"` |
+| Summary questions | `S<number>` | `"S1"`, `"S2"` |
+
+## Validation
+
+Run `node -e "const v=require('./validator.js'); const d=require('js-yaml').load(require('fs').readFileSync('your-file.yaml','utf8')); console.log(v.validateYAML(d))"` to check a file, or open it in the browser — validation errors are shown inline.
