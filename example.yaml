@@ -1,0 +1,96 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Questionnaire YAML schema — example.yaml
+#
+# Text fields ("TextValue") can be:
+#   - A plain string:              title: "My Question"
+#   - A bilingual object:          title: {en: "My Question", zh: "我的问题"}
+#
+# If ANY text field in the file is a bilingual object, the language bar is
+# shown in the UI so respondents can switch between EN / 中文 / both.
+#
+# Required top-level keys: meta, sections
+# Optional top-level key:  summary
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── meta (required) ──────────────────────────────────────────────────────────
+# Contains metadata about the questionnaire itself.
+#   title        (required) TextValue — shown in the page header and browser tab
+#   organization (optional) TextValue — shown below the title in the header
+meta:
+  title:
+    en: "Sample Feedback Survey"
+    zh: "示例反馈问卷"
+  organization:
+    en: "Example Organization"
+    zh: "示例组织"
+
+# ── sections (required) ──────────────────────────────────────────────────────
+# A non-empty array of section objects. Each section groups related questions.
+#
+# Section fields:
+#   id          (required) string    — unique identifier, used in TOC anchors
+#   title       (required) TextValue — section heading
+#   description (optional) TextValue — shown below the heading in smaller text
+#   questions   (required) non-empty array of question objects
+#
+# Question fields:
+#   id      (required) string    — unique across ALL questions (sections + summary)
+#   title   (required) TextValue — the question text shown to the respondent
+#   context (optional) TextValue — additional context shown below the title
+#   prompts (optional) array of TextValue — bullet points guiding the response
+sections:
+  - id: "1"
+    title:
+      en: "General Experience"
+      zh: "整体体验"
+    description:
+      en: "Please share your overall impressions."
+      zh: "请分享您的整体印象。"
+    questions:
+      - id: "Q1.1"
+        title:
+          en: "How would you rate the overall experience?"
+          zh: "您如何评价整体体验？"
+        # prompts: array of TextValue — each item is a bullet guiding the answer
+        prompts:
+          - en: "Consider all aspects of the experience"
+            zh: "请考虑体验的各个方面"
+      - id: "Q1.2"
+        title:
+          en: "What was the highlight for you?"
+          zh: "您认为最精彩的部分是什么？"
+
+  - id: "2"
+    title:
+      en: "Suggestions"
+      zh: "改进建议"
+    questions:
+      - id: "Q2.1"
+        title:
+          en: "What improvements would you suggest?"
+          zh: "您有哪些改进建议？"
+        # context: additional framing shown beneath the question title
+        context:
+          en: "Be as specific as possible."
+          zh: "请尽量具体。"
+
+# ── summary (optional) ───────────────────────────────────────────────────────
+# An optional closing section rendered with a distinct style (dark header).
+# If omitted entirely, no summary section is shown.
+#
+# Summary fields:
+#   title       (required) TextValue — heading for the summary section
+#   description (optional) TextValue — shown below the heading
+#   questions   (required) non-empty array of question objects (same schema as above)
+summary:
+  title:
+    en: "Final Thoughts"
+    zh: "总结意见"
+  description:
+    en: "Please add any other comments."
+    zh: "如有其他意见，请在此填写。"
+  questions:
+    - id: "S1"
+      title:
+        en: "Any additional comments?"
+        zh: "还有其他意见吗？"

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Answer Reader</title>
+  <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+  <link rel="stylesheet" href="reader.css" />
+</head>
+<body class="lang-both">
+
+<header>
+  <h1 id="reader-title">Answer Reader</h1>
+  <div class="sub" id="reader-sub"></div>
+</header>
+
+<div class="lang-bar" id="lang-bar" style="display:none">
+  <button class="lang-btn active" onclick="setLang('both')">EN + 中文</button>
+  <button class="lang-btn" onclick="setLang('en')">English Only</button>
+  <button class="lang-btn" onclick="setLang('zh')">仅中文</button>
+</div>
+
+<!-- Upload Section -->
+<div class="upload-zone">
+  <div class="drop-area" id="drop-area" onclick="document.getElementById('file-input').click()">
+    <div class="drop-icon">📂</div>
+    <div class="drop-title en-only">Load Answer Files</div>
+    <div class="drop-title zh-only">加载答卷文件</div>
+    <div class="drop-sub en-only">Click to browse or drag &amp; drop YAML answer files here</div>
+    <div class="drop-sub zh-only">点击选择文件，或将YAML答卷文件拖放至此</div>
+    <div class="drop-sub" style="margin-top:8px;font-size:0.78rem;color:#aaa">
+      Multiple files supported / 支持多文件同时加载
+    </div>
+  </div>
+  <input type="file" id="file-input" accept=".yaml,.yml" multiple onchange="handleFiles(this.files)" />
+
+  <div class="file-list" id="file-list"></div>
+
+  <div class="status-bar">
+    <div class="status-count" id="status-count"></div>
+    <button class="btn btn-danger" id="clear-btn" onclick="clearAll()" style="display:none">
+      <span class="en-only">Clear All</span>
+      <span class="zh-only">清空</span>
+    </button>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="stats-panel" id="stats-panel" style="display:none">
+  <div class="stats-grid" id="stats-grid"></div>
+</div>
+
+<!-- Filter bar -->
+<div class="filter-bar" id="filter-bar" style="display:none">
+  <label class="en-only">Show questions:</label>
+  <label class="zh-only">显示题目：</label>
+  <select id="filter-mode" onchange="applyFilter()">
+    <option value="all">All / 全部</option>
+    <option value="answered">With answers / 有回答</option>
+    <option value="unanswered">No answers yet / 暂无回答</option>
+  </select>
+  <input type="text" id="search-box" placeholder="Search questions or answers… / 搜索…" oninput="applyFilter()" />
+</div>
+
+<!-- Jump nav -->
+<div class="jump-nav" id="jump-nav" style="display:none">
+  <div class="jump-nav-inner" id="jump-nav-inner"></div>
+</div>
+
+<!-- Results -->
+<main id="results">
+  <div class="empty-state">
+    <div class="empty-icon">📋</div>
+    <div class="en-only">Load one or more answer files to see results.</div>
+    <div class="zh-only">请加载一个或多个答卷文件以查看汇总结果。</div>
+  </div>
+</main>
+
+<script src="reader.js"></script>
+</body>
+</html>

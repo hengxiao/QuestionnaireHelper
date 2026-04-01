@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Questionnaire</title>
+  <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+  <link rel="stylesheet" href="questionnaire.css" />
+</head>
+<body class="lang-both">
+
+<!-- ── Mobile sticky topbar ──────────────────────────────────────────────── -->
+<div class="mobile-topbar" id="mobile-topbar">
+  <button class="hamburger-btn" onclick="toggleToc()" aria-label="Open table of contents">☰</button>
+  <div class="mob-prog-wrap">
+    <div class="mob-prog-track"><div class="mob-prog-fill" id="mob-prog-fill" style="width:0%"></div></div>
+    <div class="mob-prog-label" id="mob-prog-label">0 / 0</div>
+  </div>
+</div>
+
+<!-- ── Header (populated by JS from YAML meta) ───────────────────────────── -->
+<header>
+  <h1 id="page-title"></h1>
+  <div class="sub" id="page-org" style="display:none"></div>
+</header>
+
+<!-- ── Language bar (hidden until bilingual content detected) ────────────── -->
+<div class="lang-bar" id="lang-bar" style="display:none">
+  <button class="lang-btn active" onclick="setLang('both')">EN + 中文</button>
+  <button class="lang-btn" onclick="setLang('en')">English Only</button>
+  <button class="lang-btn" onclick="setLang('zh')">仅中文</button>
+</div>
+
+<!-- ── Page layout ───────────────────────────────────────────────────────── -->
+<div class="page-layout">
+
+  <!-- TOC Overlay (mobile backdrop) -->
+  <div class="toc-overlay" id="toc-overlay" onclick="toggleToc()"></div>
+
+  <!-- TOC Sidebar — leftmost -->
+  <nav class="toc-sidebar" id="toc-sidebar" aria-label="Table of contents">
+    <div class="toc-top">
+      <div class="toc-title-row">
+        <span class="toc-title">Contents / 目录</span>
+        <button class="toc-close-btn" onclick="toggleToc()" aria-label="Close">✕</button>
+      </div>
+
+      <div class="toc-progress-track">
+        <div class="toc-progress-fill" id="toc-prog-fill" style="width:0%"></div>
+      </div>
+      <div class="toc-progress-label" id="toc-prog-label">—</div>
+      <div class="autosave-status" id="autosave-status">✓ Auto-saved / 已自动保存</div>
+
+      <div class="toc-legend">
+        <div class="toc-legend-item">
+          <div class="toc-dot-sample" style="background:#43a047"></div>
+          <span class="en-only">Confirmed</span><span class="zh-only">已确认</span>
+        </div>
+        <div class="toc-legend-item">
+          <div class="toc-dot-sample" style="background:#5b8dee"></div>
+          <span class="en-only">Answered</span><span class="zh-only">已作答</span>
+        </div>
+        <div class="toc-legend-item">
+          <div class="toc-dot-sample" style="background:#f5a623"></div>
+          <span class="en-only">Skipped</span><span class="zh-only">已跳过</span>
+        </div>
+        <div class="toc-legend-item">
+          <div class="toc-dot-sample" style="background:#e57373"></div>
+          <span class="en-only">Remaining</span><span class="zh-only">待回答</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="toc-list" id="toc-list"></div>
+  </nav>
+
+  <!-- Content area — centered in remaining space -->
+  <div class="content-area">
+    <div class="content-wrap">
+
+      <!-- Instruction card -->
+      <div class="instruction-card">
+        <h3>
+          📋
+          <span class="en-only">How to complete this questionnaire</span>
+          <span class="zh-only">问卷填写说明</span>
+        </h3>
+        <div class="instruction-steps">
+
+          <div class="instruction-step">
+            <span class="step-num">1</span>
+            <span class="en-only">Enter your <strong>name</strong> below — it is required before downloading.</span>
+            <span class="zh-only">在下方填写您的<strong>姓名</strong>——下载前为必填项。</span>
+          </div>
+
+          <div class="instruction-step">
+            <span class="step-num">2</span>
+            <div>
+              <span class="en-only">
+                For each question, <strong>write your answer</strong> in the text box. The question turns
+                <span class="chip chip-blue">● Answered</span> when you type.
+              </span>
+              <span class="zh-only">
+                对于每道题，在文本框中<strong>填写您的回答</strong>。填写后题目变为
+                <span class="chip chip-blue">● 已作答</span>。
+              </span>
+            </div>
+          </div>
+
+          <div class="instruction-step">
+            <span class="step-num">3</span>
+            <div>
+              <span class="en-only">
+                When satisfied with your answer, check
+                <span class="chip chip-green">✓ Confirmed</span>
+                to mark it as final and turn it green.
+              </span>
+              <span class="zh-only">
+                对回答满意后，勾选
+                <span class="chip chip-green">✓ 已确认</span>
+                将其标记为最终答案，题目变绿。
+              </span>
+            </div>
+          </div>
+
+          <div class="instruction-step">
+            <span class="step-num">4</span>
+            <div>
+              <span class="en-only">
+                If you have no opinion on a question, check
+                <span class="chip chip-yellow">⊘ Skip</span>.
+                You can skip and come back later.
+              </span>
+              <span class="zh-only">
+                如对某题无意见，勾选
+                <span class="chip chip-yellow">⊘ 跳过此题</span>。
+                可以随时跳过并稍后返回。
+              </span>
+            </div>
+          </div>
+
+          <div class="instruction-step">
+            <span class="step-num">5</span>
+            <span class="en-only">
+              Use the <strong>table of contents</strong> on the left to track your progress.
+              When all questions are answered+confirmed or skipped, click <strong>Download Answers</strong> to save a YAML file for submission.
+            </span>
+            <span class="zh-only">
+              使用左侧<strong>目录</strong>追踪答题进度。
+              所有题目作答确认或跳过后，点击<strong>下载答卷</strong>，保存YAML文件供提交。
+            </span>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Respondent name (mandatory) -->
+      <div class="respondent-wrap">
+        <div class="respondent-box" id="respondent-box">
+          <label for="respondent-name">
+            <span class="en-only">Your Name</span>
+            <span class="zh-only">您的姓名</span>
+            <span class="required-star">*</span>
+          </label>
+          <input type="text" id="respondent-name"
+                 placeholder="Required before download / 下载前必填"
+                 oninput="clearNameError(); saveState();" />
+        </div>
+        <div class="name-error" id="name-error" style="display:none">
+          <span class="en-only">Please enter your name before downloading.</span>
+          <span class="zh-only">下载前请填写您的姓名。</span>
+        </div>
+      </div>
+
+      <main id="main-content">
+        <div class="loading">
+          <div class="loading-spinner"></div>
+          <p>Loading questionnaire… / 加载问卷中…</p>
+        </div>
+      </main>
+    </div><!-- .content-wrap -->
+  </div><!-- .content-area -->
+
+</div><!-- .page-layout -->
+
+<!-- Sticky footer -->
+<div class="sticky-footer" style="flex-direction:column; align-items:center; gap:6px;">
+  <div style="display:flex; gap:12px;">
+    <button class="btn btn-secondary" onclick="clearAll()">
+      <span class="en-only">Clear All</span>
+      <span class="zh-only">清空</span>
+    </button>
+    <button id="download-btn" class="btn btn-primary" onclick="downloadAnswers()" disabled>
+      <span class="en-only">Download Answers</span>
+      <span class="zh-only">下载答卷</span>
+    </button>
+  </div>
+  <div id="download-hint" class="download-hint"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="validator.js"></script>
+<script src="questionnaire.js"></script>
+</body>
+</html>
