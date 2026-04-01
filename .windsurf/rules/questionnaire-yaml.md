@@ -61,8 +61,26 @@ title:
 - Questions: `"Q1.1"`, `"Q1.2"`, `"Q2.1"`, …
 - Summary: `"S1"`, `"S2"`, …
 
+## After writing a YAML file
+
+Validate immediately after writing:
+
+```bash
+node -e "
+  const v = require('./validator.js');
+  const yaml = require('js-yaml');
+  const fs = require('fs');
+  const data = yaml.load(fs.readFileSync('<filename>', 'utf8'));
+  const errors = v.validateYAML(data);
+  if (errors.length) { console.error('VALIDATION ERRORS:', errors); process.exit(1); }
+  else console.log('Valid!');
+"
+```
+
+Fix every reported error and re-validate until the output is `Valid!`.
+
 ## Preview URLs
 
-After creating a YAML, suggest:
+After the file is valid, show the user:
 - Local: `http://localhost:4001/questionnaire.html?yaml=<file>`
 - GitHub Pages: `https://hengxiao.github.io/QuestionnaireHelper/questionnaire.html?yaml=<file>`

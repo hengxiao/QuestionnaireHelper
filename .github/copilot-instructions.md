@@ -69,6 +69,24 @@ reader.html?yaml=your-file.yaml
 
 The `?yaml=` parameter points to any YAML file served from the same origin. Default is `questionnaire.yaml`.
 
+## After writing a YAML file
+
+Always validate immediately after writing a questionnaire YAML. Run:
+
+```bash
+node -e "
+  const v = require('./validator.js');
+  const yaml = require('js-yaml');
+  const fs = require('fs');
+  const data = yaml.load(fs.readFileSync('<filename>', 'utf8'));
+  const errors = v.validateYAML(data);
+  if (errors.length) { console.error('VALIDATION ERRORS:', errors); process.exit(1); }
+  else console.log('Valid!');
+"
+```
+
+Fix every error reported and re-validate until the output is `Valid!`.
+
 ## Testing
 
 ```bash

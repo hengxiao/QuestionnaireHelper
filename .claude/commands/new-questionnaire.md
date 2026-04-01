@@ -62,8 +62,20 @@ If ANY field in the file is a bilingual object, a language switcher (EN / 中文
 
 ## Output
 
-- Write the file to the repo root.
-- After writing, show the user the URL to preview it locally:
-  `http://localhost:4001/questionnaire.html?yaml=<filename>`
-- And the GitHub Pages URL (once pushed):
-  `https://hengxiao.github.io/QuestionnaireHelper/questionnaire.html?yaml=<filename>`
+1. Write the YAML file to the repo root.
+2. **Validate immediately** — run the validator against the file you just wrote:
+   ```bash
+   node -e "
+     const v = require('./validator.js');
+     const yaml = require('js-yaml');
+     const fs = require('fs');
+     const data = yaml.load(fs.readFileSync('<filename>', 'utf8'));
+     const errors = v.validateYAML(data);
+     if (errors.length) { console.error('VALIDATION ERRORS:', errors); process.exit(1); }
+     else console.log('Valid!');
+   "
+   ```
+3. **Fix every error** returned by the validator and re-validate until there are none.
+4. Show the user the URLs to preview the finished file:
+   - Local: `http://localhost:4001/questionnaire.html?yaml=<filename>`
+   - GitHub Pages: `https://hengxiao.github.io/QuestionnaireHelper/questionnaire.html?yaml=<filename>`

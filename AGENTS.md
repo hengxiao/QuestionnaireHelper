@@ -73,9 +73,22 @@ Any ISO language keys are valid. If any field uses a bilingual object, the UI au
 
 ### After creating a YAML file
 
-Tell the user how to preview it:
-- **Local:** `http://localhost:4001/questionnaire.html?yaml=<filename>`
-- **GitHub Pages:** `https://hengxiao.github.io/QuestionnaireHelper/questionnaire.html?yaml=<filename>`
+1. **Validate immediately** — run the validator against the file you just wrote:
+   ```bash
+   node -e "
+     const v = require('./validator.js');
+     const yaml = require('js-yaml');
+     const fs = require('fs');
+     const data = yaml.load(fs.readFileSync('<filename>', 'utf8'));
+     const errors = v.validateYAML(data);
+     if (errors.length) { console.error('VALIDATION ERRORS:', errors); process.exit(1); }
+     else console.log('Valid!');
+   "
+   ```
+2. **Fix every error** and re-validate until the output is `Valid!`.
+3. Tell the user the preview URLs:
+   - **Local:** `http://localhost:4001/questionnaire.html?yaml=<filename>`
+   - **GitHub Pages:** `https://hengxiao.github.io/QuestionnaireHelper/questionnaire.html?yaml=<filename>`
 
 ## Running tests
 

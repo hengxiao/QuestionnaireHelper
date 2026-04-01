@@ -70,4 +70,18 @@ Any ISO language key is valid. Use bilingual objects consistently — if one fie
 
 ## Validation
 
-Run `node -e "const v=require('./validator.js'); const d=require('js-yaml').load(require('fs').readFileSync('your-file.yaml','utf8')); console.log(v.validateYAML(d))"` to check a file, or open it in the browser — validation errors are shown inline.
+After writing any questionnaire YAML, validate it immediately:
+
+```bash
+node -e "
+  const v = require('./validator.js');
+  const yaml = require('js-yaml');
+  const fs = require('fs');
+  const data = yaml.load(fs.readFileSync('<filename>', 'utf8'));
+  const errors = v.validateYAML(data);
+  if (errors.length) { console.error('VALIDATION ERRORS:', errors); process.exit(1); }
+  else console.log('Valid!');
+"
+```
+
+Fix every reported error and re-validate until the output is `Valid!`. The browser also shows validation errors inline if you prefer visual feedback.
