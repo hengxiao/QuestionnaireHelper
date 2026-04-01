@@ -64,17 +64,20 @@ test.describe('Page load', () => {
     await expect(page.locator('#download-btn')).toBeDisabled();
   });
 
-  test('download hint shows all questions pending', async ({ page }) => {
+  test('download hint shows pending questions (excludes disabled conditionals)', async ({ page }) => {
+    // Q2.5 is a conditional question that starts disabled, so it's excluded from the pending count.
     await expect(page.locator('#download-hint .en-only')).toContainText(
-      String(TOTAL_QUESTIONS)
+      String(TOTAL_QUESTIONS - 1)
     );
   });
 
-  test('confirm pills are all disabled on fresh load', async ({ page }) => {
-    const pills = page.locator('.confirm-pill');
-    const count = await pills.count();
+  test('confirm pills are disabled on fresh load for non-ranking questions', async ({ page }) => {
+    // Ranking questions (Q2.4) start with a seeded answer so their confirm pill is enabled.
+    // All other question types start with no answer and should have a disabled confirm pill.
+    const nonRankingPills = page.locator('.question-block:not([data-qid="Q2.4"]) .confirm-pill');
+    const count = await nonRankingPills.count();
     for (let i = 0; i < count; i++) {
-      await expect(pills.nth(i)).toHaveClass(/disabled/);
+      await expect(nonRankingPills.nth(i)).toHaveClass(/disabled/);
     }
   });
 
@@ -245,13 +248,18 @@ test.describe('Confirm', () => {
 test.describe('Progress bar', () => {
   test.beforeEach(({ page }) => loadClean(page));
 
-  test('progress label shows totals', async ({ page }) => {
-    await expect(page.locator('#toc-prog-label')).toContainText(`/ ${TOTAL_QUESTIONS}`);
+  test('progress label shows totals (excludes disabled conditionals)', async ({ page }) => {
+    // Q2.5 is a conditional question that starts disabled, so it's excluded from the progress count.
+    await expect(page.locator('#toc-prog-label')).toContainText(`/ ${TOTAL_QUESTIONS - 1}`);
   });
 
   test('answering a question increments the answered count', async ({ page }) => {
+    // Q2.4 (ranking) starts pre-seeded with a default answer,
+    // so before typing we already have 1 answered. After typing in QID we get 2.
+    const before = await page.locator('#toc-prog-label').textContent();
+    const beforeCount = parseInt((before.match(/(\d+) answered/) || ['0','0'])[1]);
     await page.locator(`textarea[data-qid="${QID}"]`).fill('hello');
-    await expect(page.locator('#toc-prog-label')).toContainText('1 answered');
+    await expect(page.locator('#toc-prog-label')).toContainText(`${beforeCount + 1} answered`);
   });
 
   test('confirming a question increments the confirmed count', async ({ page }) => {
@@ -271,23 +279,37 @@ test.describe('Download button', () => {
   test.beforeEach(({ page }) => loadClean(page));
 
   test('hint count decreases as questions are completed', async ({ page }) => {
+    // Start: TOTAL_QUESTIONS - 1 pending (Q2.5 disabled conditional excluded).
+    // After skipping QID: TOTAL_QUESTIONS - 2 pending.
     await page.locator(byId('skip-' + QID)).check();
     await expect(page.locator('#download-hint .en-only')).toContainText(
-      String(TOTAL_QUESTIONS - 1)
+      String(TOTAL_QUESTIONS - 2)
     );
   });
 
-  test('enabled once every question is skipped', async ({ page }) => {
-    for (const cb of await page.locator('input[id^="skip-"]').all()) {
-      await cb.check();
+  test('enabled once every non-disabled question is skipped', async ({ page }) => {
+    // Q2.5 is a conditional question that starts disabled — it's excluded from pending count.
+    // Skip all the others; the download button should become enabled.
+    const allQids = await page.evaluate(() =>
+      [...document.querySelectorAll('.question-block[data-qid]')]
+        .filter(b => !b.closest('.cond-disabled'))
+        .map(b => b.dataset.qid)
+    );
+    for (const qid of allQids) {
+      await page.locator(`[id="skip-${qid}"]`).check();
     }
     await expect(page.locator('#download-btn')).toBeEnabled();
     await expect(page.locator('#download-hint')).toBeEmpty();
   });
 
   test('download requires name — shows error when name is empty', async ({ page }) => {
-    for (const cb of await page.locator('input[id^="skip-"]').all()) {
-      await cb.check();
+    const allQids = await page.evaluate(() =>
+      [...document.querySelectorAll('.question-block[data-qid]')]
+        .filter(b => !b.closest('.cond-disabled'))
+        .map(b => b.dataset.qid)
+    );
+    for (const qid of allQids) {
+      await page.locator(`[id="skip-${qid}"]`).check();
     }
     await expect(page.locator('#download-btn')).toBeEnabled();
     await page.locator('#download-btn').click();
@@ -296,8 +318,13 @@ test.describe('Download button', () => {
   });
 
   test('entering a name clears the name error', async ({ page }) => {
-    for (const cb of await page.locator('input[id^="skip-"]').all()) {
-      await cb.check();
+    const allQids = await page.evaluate(() =>
+      [...document.querySelectorAll('.question-block[data-qid]')]
+        .filter(b => !b.closest('.cond-disabled'))
+        .map(b => b.dataset.qid)
+    );
+    for (const qid of allQids) {
+      await page.locator(`[id="skip-${qid}"]`).check();
     }
     await page.locator('#download-btn').click(); // trigger error
     await page.locator('#respondent-name').fill('Alice');
@@ -430,5 +457,158 @@ test.describe('Copy button', () => {
     await expect(page.locator('.toast')).toBeVisible();
     const clip = await page.evaluate(() => navigator.clipboard.readText());
     expect(clip).toContain('Q1.1');
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+
+test.describe('Single-choice (Q1.3)', () => {
+  test.beforeEach(({ page }) => loadClean(page));
+
+  const QID_SC = 'Q1.3';
+
+  test('clicking an option enables the confirm pill', async ({ page }) => {
+    await page.locator(`[id="q-${QID_SC}"] .choice-option`).first().click();
+    await expect(page.locator(byId('confirm-label-' + QID_SC))).not.toHaveClass(/disabled/);
+  });
+
+  test('clicking an option marks TOC dot as answered', async ({ page }) => {
+    await page.locator(`[id="q-${QID_SC}"] .choice-option`).first().click();
+    await expect(page.locator(`.toc-q-item[data-qid="${QID_SC}"]`)).toHaveClass(/state-answered/);
+  });
+
+  test('confirm after selecting an option marks TOC dot green', async ({ page }) => {
+    await page.locator(`[id="q-${QID_SC}"] .choice-option`).first().click();
+    await page.locator(byId('confirm-' + QID_SC)).check();
+    await expect(page.locator(`.toc-q-item[data-qid="${QID_SC}"]`)).toHaveClass(/state-confirmed/);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+
+test.describe('Score (Q1.4)', () => {
+  test.beforeEach(({ page }) => loadClean(page));
+
+  const QID_SCORE = 'Q1.4';
+
+  test('clicking a star enables the confirm pill', async ({ page }) => {
+    // Click the 3rd star (value=3) — use attribute selector to avoid dot-in-id CSS issue
+    await page.locator(`[id="stars-${QID_SCORE}"] .star-btn`).nth(2).click();
+    await expect(page.locator(byId('confirm-label-' + QID_SCORE))).not.toHaveClass(/disabled/);
+  });
+
+  test('clicking a star marks TOC dot as answered', async ({ page }) => {
+    await page.locator(`[id="stars-${QID_SCORE}"] .star-btn`).nth(2).click();
+    await expect(page.locator(`.toc-q-item[data-qid="${QID_SCORE}"]`)).toHaveClass(/state-answered/);
+  });
+
+  test('re-clicking the same star deselects it', async ({ page }) => {
+    const star = page.locator(`[id="stars-${QID_SCORE}"] .star-btn`).nth(2);
+    await star.click();
+    await expect(page.locator(byId('confirm-label-' + QID_SCORE))).not.toHaveClass(/disabled/);
+    await star.click();
+    await expect(page.locator(byId('confirm-label-' + QID_SCORE))).toHaveClass(/disabled/);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+
+test.describe('Multiple-choice (Q2.2)', () => {
+  test.beforeEach(({ page }) => loadClean(page));
+
+  const QID_MC = 'Q2.2';
+
+  test('checking a box enables the confirm pill', async ({ page }) => {
+    // Use .choice-option input to target only choice checkboxes (not skip/confirm)
+    await page.locator(`[id="q-${QID_MC}"] .choice-option input[type="checkbox"]`).first().check();
+    await expect(page.locator(byId('confirm-label-' + QID_MC))).not.toHaveClass(/disabled/);
+  });
+
+  test('unchecking all boxes removes the answer and disables confirm', async ({ page }) => {
+    const cb = page.locator(`[id="q-${QID_MC}"] .choice-option input[type="checkbox"]`).first();
+    await cb.check();
+    await cb.uncheck();
+    await expect(page.locator(byId('confirm-label-' + QID_MC))).toHaveClass(/disabled/);
+  });
+
+  test('checking multiple boxes marks TOC dot as answered', async ({ page }) => {
+    const checkboxes = page.locator(`[id="q-${QID_MC}"] .choice-option input[type="checkbox"]`);
+    await checkboxes.nth(0).check();
+    await checkboxes.nth(1).check();
+    await expect(page.locator(`.toc-q-item[data-qid="${QID_MC}"]`)).toHaveClass(/state-answered/);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+
+test.describe('True-False (Q2.3)', () => {
+  test.beforeEach(({ page }) => loadClean(page));
+
+  const QID_TF = 'Q2.3';
+
+  test('clicking True enables confirm pill', async ({ page }) => {
+    await page.locator(byId('tf-true-' + QID_TF)).click();
+    await expect(page.locator(byId('confirm-label-' + QID_TF))).not.toHaveClass(/disabled/);
+  });
+
+  test('clicking True marks TOC dot as answered', async ({ page }) => {
+    await page.locator(byId('tf-true-' + QID_TF)).click();
+    await expect(page.locator(`.toc-q-item[data-qid="${QID_TF}"]`)).toHaveClass(/state-answered/);
+  });
+
+  test('clicking True again deselects it', async ({ page }) => {
+    await page.locator(byId('tf-true-' + QID_TF)).click();
+    await page.locator(byId('tf-true-' + QID_TF)).click();
+    await expect(page.locator(byId('confirm-label-' + QID_TF))).toHaveClass(/disabled/);
+  });
+
+  test('clicking False after True switches the selection', async ({ page }) => {
+    await page.locator(byId('tf-true-' + QID_TF)).click();
+    await page.locator(byId('tf-false-' + QID_TF)).click();
+    await expect(page.locator(byId('tf-false-' + QID_TF))).toHaveClass(/selected/);
+    await expect(page.locator(byId('tf-true-' + QID_TF))).not.toHaveClass(/selected/);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+
+test.describe('Conditional (Q2.5 depends on Q2.3)', () => {
+  test.beforeEach(({ page }) => loadClean(page));
+
+  const QID_WATCH = 'Q2.3';  // true-false, condition: equals "false"
+  const QID_COND  = 'Q2.5';  // the conditional question
+
+  test('conditional question has overlay visible on fresh load', async ({ page }) => {
+    const overlay = page.locator(byId('cond-overlay-' + QID_COND));
+    await expect(overlay).toBeVisible();
+  });
+
+  test('answering watched question with True (not matching equals "false") keeps overlay', async ({ page }) => {
+    await page.locator(byId('tf-true-' + QID_WATCH)).click();
+    const overlay = page.locator(byId('cond-overlay-' + QID_COND));
+    await expect(overlay).toBeVisible();
+  });
+
+  test('answering watched question with False (matching equals "false") hides overlay', async ({ page }) => {
+    await page.locator(byId('tf-false-' + QID_WATCH)).click();
+    const overlay = page.locator(byId('cond-overlay-' + QID_COND));
+    await expect(overlay).toBeHidden();
+  });
+
+  test('clearing watched answer re-shows overlay', async ({ page }) => {
+    // Click False to satisfy condition
+    await page.locator(byId('tf-false-' + QID_WATCH)).click();
+    // Click False again to deselect
+    await page.locator(byId('tf-false-' + QID_WATCH)).click();
+    const overlay = page.locator(byId('cond-overlay-' + QID_COND));
+    await expect(overlay).toBeVisible();
+  });
+
+  test('conditional question does not count in progress when disabled', async ({ page }) => {
+    // On fresh load, Q2.5 is disabled; total count should exclude it
+    const label = page.locator('#toc-prog-label');
+    const text = await label.textContent();
+    // TOTAL_QUESTIONS includes Q2.5; when it's disabled it should not count
+    expect(text).toContain(`/ ${TOTAL_QUESTIONS - 1}`);
   });
 });

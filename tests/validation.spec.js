@@ -257,4 +257,116 @@ test.describe('validateYAML', () => {
     expect(errors.length).toBeGreaterThan(1);
   });
 
+  // ── New question types ────────────────────────────────────────────────────
+
+  // 23. single-choice missing options → error
+  test('single-choice missing options returns error', () => {
+    const data = minimalValid();
+    data.sections[0].questions[0].type = 'single-choice';
+    // no options field
+    const errors = validateYAML(data);
+    expect(errors.some(e => e.includes('options'))).toBe(true);
+  });
+
+  // 24. multiple-choice missing options → error
+  test('multiple-choice missing options returns error', () => {
+    const data = minimalValid();
+    data.sections[0].questions[0].type = 'multiple-choice';
+    const errors = validateYAML(data);
+    expect(errors.some(e => e.includes('options'))).toBe(true);
+  });
+
+  // 25. ranking missing items → error
+  test('ranking missing items returns error', () => {
+    const data = minimalValid();
+    data.sections[0].questions[0].type = 'ranking';
+    const errors = validateYAML(data);
+    expect(errors.some(e => e.includes('items'))).toBe(true);
+  });
+
+  // 26. Unknown type value → error
+  test('unknown type value returns error', () => {
+    const data = minimalValid();
+    data.sections[0].questions[0].type = 'essay';
+    const errors = validateYAML(data);
+    expect(errors.some(e => e.includes('type') && e.includes('essay'))).toBe(true);
+  });
+
+  // 27. Valid single-choice with options → no error
+  test('valid single-choice with options returns no errors', () => {
+    const data = minimalValid();
+    data.sections[0].questions[0].type = 'single-choice';
+    data.sections[0].questions[0].options = ['Option A', 'Option B'];
+    const errors = validateYAML(data);
+    expect(errors).toHaveLength(0);
+  });
+
+  // 28. Valid ranking with items → no error
+  test('valid ranking with items returns no errors', () => {
+    const data = minimalValid();
+    data.sections[0].questions[0].type = 'ranking';
+    data.sections[0].questions[0].items = ['Item 1', 'Item 2', 'Item 3'];
+    const errors = validateYAML(data);
+    expect(errors).toHaveLength(0);
+  });
+
+  // 29. condition with no question → error
+  test('condition with no question field returns error', () => {
+    const data = minimalValid();
+    data.sections[0].questions[0].condition = { equals: 'Yes' };
+    const errors = validateYAML(data);
+    expect(errors.some(e => e.includes('condition') && e.includes('question'))).toBe(true);
+  });
+
+  // 30. condition with no trigger key → error
+  test('condition with no trigger key returns error', () => {
+    const data = minimalValid();
+    // Add a second question to reference
+    data.sections[0].questions.push({ id: 'Q2', title: 'Second' });
+    data.sections[0].questions[0].condition = { question: 'Q2' };
+    const errors = validateYAML(data);
+    expect(errors.some(e => e.includes('condition') && /equals|includes|min_score|answered/.test(e))).toBe(true);
+  });
+
+  // 31. condition with multiple trigger keys → error
+  test('condition with multiple trigger keys returns error', () => {
+    const data = minimalValid();
+    data.sections[0].questions.push({ id: 'Q2', title: 'Second' });
+    data.sections[0].questions[0].condition = { question: 'Q2', equals: 'Yes', answered: true };
+    const errors = validateYAML(data);
+    expect(errors.some(e => e.includes('condition') && e.includes('multiple'))).toBe(true);
+  });
+
+  // 32. condition.question references nonexistent ID → error
+  test('condition.question references nonexistent ID returns error', () => {
+    const data = minimalValid();
+    data.sections[0].questions[0].condition = { question: 'NONEXISTENT', equals: 'Yes' };
+    const errors = validateYAML(data);
+    expect(errors.some(e => e.includes('NONEXISTENT'))).toBe(true);
+  });
+
+  // 33. Valid condition with equals → no error
+  test('valid condition with equals returns no errors', () => {
+    const data = minimalValid();
+    data.sections[0].questions.push({
+      id: 'Q2',
+      title: 'Second question',
+      condition: { question: 'Q1', equals: 'Yes' }
+    });
+    const errors = validateYAML(data);
+    expect(errors).toHaveLength(0);
+  });
+
+  // 34. Valid condition with answered: true → no error
+  test('valid condition with answered: true returns no errors', () => {
+    const data = minimalValid();
+    data.sections[0].questions.push({
+      id: 'Q2',
+      title: 'Second question',
+      condition: { question: 'Q1', answered: true }
+    });
+    const errors = validateYAML(data);
+    expect(errors).toHaveLength(0);
+  });
+
 });

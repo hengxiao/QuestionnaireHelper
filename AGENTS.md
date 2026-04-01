@@ -31,9 +31,21 @@ sections:                   # required, non-empty array
     questions:              # required, non-empty array
       - id: "Q1.1"          # required, globally unique across ALL questions
         title: TextValue    # required
+        type: text          # optional — text|single-choice|multiple-choice|true-false|ranking|score
         context: TextValue  # optional — shown below the question title
         prompts:            # optional — array of TextValue bullet points
           - TextValue
+        options:            # required for single-choice, multiple-choice
+          - TextValue
+        items:              # required for ranking
+          - TextValue
+        condition:          # optional — disables question when condition not met
+          question: "Q0.1"  # which question ID to watch
+          equals: "Yes"     # for single-choice / true-false (compare answer string)
+          # OR includes: "Option A"   # for multiple-choice (answer array contains this)
+          # OR min_score: 4           # for score (answer >= this)
+          # OR answered: true         # any answer present
+        disabled_message: TextValue  # optional; auto-generated if absent
 
 summary:                    # optional closing section
   title: TextValue          # required if block is present
@@ -57,6 +69,17 @@ title:
 
 Any ISO language keys are valid. If any field uses a bilingual object, the UI automatically shows a language switcher.
 
+### Question types
+
+| type | Widget | Required fields |
+|------|--------|----------------|
+| `text` (default) | Textarea | — |
+| `single-choice` | Radio buttons | `options: [TextValue]` |
+| `multiple-choice` | Checkboxes | `options: [TextValue]` |
+| `true-false` | Two toggle pill buttons | — |
+| `ranking` | Drag-and-drop list | `items: [TextValue]` |
+| `score` | 5-star rating (1–5) | — |
+
 ### Validation rules
 
 - `meta.title` — required, non-empty.
@@ -64,6 +87,11 @@ Any ISO language keys are valid. If any field uses a bilingual object, the UI au
 - Each `section.id` — unique among sections.
 - Each `question.id` — globally unique across **all** sections and the summary.
 - `prompts` — must be an array, never a plain string.
+- `type` — must be one of `text`, `single-choice`, `multiple-choice`, `true-false`, `ranking`, `score`.
+- `options` — required (non-empty TextValue array) for `single-choice` and `multiple-choice`.
+- `items` — required (non-empty TextValue array) for `ranking`.
+- `condition.question` — must reference an existing question ID.
+- `condition` — must have exactly one trigger: `equals`, `includes`, `min_score`, or `answered`.
 
 ### ID conventions
 

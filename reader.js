@@ -35,9 +35,30 @@ function plainText(val) {
   return '';
 }
 
+// ── Answer helpers ─────────────────────────────────────────────────────────
+function isAnswerNonEmpty(val) {
+  if (val === undefined || val === null) return false;
+  if (typeof val === 'boolean') return true;
+  if (typeof val === 'number') return val > 0;
+  if (Array.isArray(val)) return val.length > 0;
+  return typeof val === 'string' && val.trim().length > 0;
+}
+
+function formatAnswerForDisplay(val, q) {
+  if (typeof val === 'boolean') return val ? 'True' : 'False';
+  if (typeof val === 'number') return `${val} / ${q?.max || 5} ★`;
+  if (Array.isArray(val)) {
+    const type = q?.type || '';
+    if (type === 'ranking') {
+      return val.map((item, i) => `${i + 1}. ${item}`).join('\n');
+    }
+    // multiple-choice: comma-joined
+    return val.join(', ');
+  }
+  return String(val);
+}
+
 // ── Bilingual detection ────────────────────────────────────────────────────
-// Only checks known TextValue positions to avoid false positives on
-// plain-string questionnaires.
 function detectBilingual(data) {
   function isBilingualTextValue(val) {
     return (
@@ -58,10 +79,17 @@ function detectBilingual(data) {
     if (isBilingualTextValue(section.title))       return true;
     if (isBilingualTextValue(section.description)) return true;
     for (const q of (section.questions || [])) {
-      if (isBilingualTextValue(q.title))   return true;
-      if (isBilingualTextValue(q.context)) return true;
+      if (isBilingualTextValue(q.title))            return true;
+      if (isBilingualTextValue(q.context))          return true;
+      if (isBilingualTextValue(q.disabled_message)) return true;
       for (const p of (q.prompts || [])) {
         if (isBilingualTextValue(p)) return true;
+      }
+      for (const opt of (q.options || [])) {
+        if (isBilingualTextValue(opt)) return true;
+      }
+      for (const item of (q.items || [])) {
+        if (isBilingualTextValue(item)) return true;
       }
     }
   }
@@ -69,10 +97,17 @@ function detectBilingual(data) {
     if (isBilingualTextValue(data.summary.title))       return true;
     if (isBilingualTextValue(data.summary.description)) return true;
     for (const q of (data.summary.questions || [])) {
-      if (isBilingualTextValue(q.title))   return true;
-      if (isBilingualTextValue(q.context)) return true;
+      if (isBilingualTextValue(q.title))            return true;
+      if (isBilingualTextValue(q.context))          return true;
+      if (isBilingualTextValue(q.disabled_message)) return true;
       for (const p of (q.prompts || [])) {
         if (isBilingualTextValue(p)) return true;
+      }
+      for (const opt of (q.options || [])) {
+        if (isBilingualTextValue(opt)) return true;
+      }
+      for (const item of (q.items || [])) {
+        if (isBilingualTextValue(item)) return true;
       }
     }
   }
@@ -315,11 +350,12 @@ function renderStructured(results) {
 
 function renderQuestionBlock(q) {
   const qAnswers = loadedAnswers
-    .filter(({ data }) => data?.answers?.[q.id] && String(data.answers[q.id]).trim())
+    .filter(({ data }) => isAnswerNonEmpty(data?.answers?.[q.id]))
     .map(({ data }) => ({
       respondent:  data?.meta?.respondent || 'Anonymous',
       timestamp:   data?.meta?.timestamp  || '',
-      text:        String(data.answers[q.id]),
+      rawVal:      data.answers[q.id],
+      text:        formatAnswerForDisplay(data.answers[q.id], q),
       isConfirmed: Array.isArray(data?.confirmed) && data.confirmed.includes(q.id)
     }));
 
@@ -430,11 +466,11 @@ function renderFallback(results) {
 
   [...allQids].sort().forEach(qid => {
     const qAnswers = loadedAnswers
-      .filter(({ data }) => data?.answers?.[qid] && String(data.answers[qid]).trim())
+      .filter(({ data }) => isAnswerNonEmpty(data?.answers?.[qid]))
       .map(({ data }) => ({
         respondent: data?.meta?.respondent || 'Anonymous',
         timestamp:  data?.meta?.timestamp || '',
-        text:       String(data.answers[qid])
+        text:       formatAnswerForDisplay(data.answers[qid], null)
       }));
 
     const qBlock = document.createElement('div');
@@ -472,14 +508,13 @@ function renderFallback(results) {
 function renderStats() {
   const respondents = loadedAnswers.length;
 
-  // Count questions with ≥1 answer
   let totalAnswered = 0;
   let totalConfirmed = 0;
 
   if (questData) {
     allQuestions.forEach(({ q }) => {
       const hasAnswer = loadedAnswers.some(
-        ({ data }) => data?.answers?.[q.id] && String(data.answers[q.id]).trim()
+        ({ data }) => isAnswerNonEmpty(data?.answers?.[q.id])
       );
       if (hasAnswer) totalAnswered++;
 

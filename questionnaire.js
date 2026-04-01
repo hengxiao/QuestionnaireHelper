@@ -1,6 +1,6 @@
 // ── State ──────────────────────────────────────────────────────────────────
 let questData   = null;
-const answers   = {};          // qid → text
+const answers   = {};          // qid → mixed (string, string[], boolean, number)
 const skipped   = new Set();   // skipped qids
 const confirmed = new Set();   // confirmed qids
 let currentLang = 'both';
@@ -41,12 +41,44 @@ function plainText(val) {
   return '';
 }
 
+// ── Answer presence helper ─────────────────────────────────────────────────
+function isAnswered(qid) {
+  const v = answers[qid];
+  if (v === undefined || v === null) return false;
+  if (typeof v === 'boolean') return true;
+  if (typeof v === 'number') return v > 0;
+  if (Array.isArray(v)) return v.length > 0;
+  return typeof v === 'string' && v.trim().length > 0;
+}
+
+// ── Condition evaluation ───────────────────────────────────────────────────
+function evaluateCondition(condition) {
+  const val = answers[condition.question];
+  if (condition.answered !== undefined)
+    return condition.answered ? isAnswered(condition.question) : !isAnswered(condition.question);
+  if (condition.equals !== undefined)
+    return String(val ?? '') === String(condition.equals);
+  if (condition.includes !== undefined)
+    return Array.isArray(val) && val.includes(condition.includes);
+  if (condition.min_score !== undefined)
+    return typeof val === 'number' && val >= condition.min_score;
+  return false;
+}
+
+// ── Auto-generate disabled message HTML ────────────────────────────────────
+function buildDisabledMessage(q) {
+  if (q.disabled_message) return `<div class="cond-msg">${txt(q.disabled_message)}</div>`;
+  const c = q.condition;
+  if (c.equals !== undefined)
+    return `<div class="cond-msg"><span class="en-only">Enabled when <strong>${escHtml(c.question)}</strong> equals "${escHtml(String(c.equals))}".</span><span class="zh-only">当 <strong>${escHtml(c.question)}</strong> 等于"${escHtml(String(c.equals))}"时开放。</span></div>`;
+  if (c.includes !== undefined)
+    return `<div class="cond-msg"><span class="en-only">Enabled when <strong>${escHtml(c.question)}</strong> includes "${escHtml(String(c.includes))}".</span><span class="zh-only">当 <strong>${escHtml(c.question)}</strong> 包含"${escHtml(String(c.includes))}"时开放。</span></div>`;
+  if (c.min_score !== undefined)
+    return `<div class="cond-msg"><span class="en-only">Enabled when <strong>${escHtml(c.question)}</strong> score ≥ ${c.min_score}.</span><span class="zh-only">当 <strong>${escHtml(c.question)}</strong> 评分 ≥ ${c.min_score} 时开放。</span></div>`;
+  return `<div class="cond-msg"><span class="en-only">Enabled after <strong>${escHtml(c.question)}</strong> is answered.</span><span class="zh-only">回答 <strong>${escHtml(c.question)}</strong> 后开放。</span></div>`;
+}
+
 // ── Bilingual detection ────────────────────────────────────────────────────
-// Returns true only if a known TextValue position contains a bilingual object
-// (i.e. an object whose values are all non-empty strings, like {en:"...", zh:"..."}).
-// Checking only known positions avoids false positives on plain-string YAMLs
-// where question/section objects like {id:"Q1", title:"foo"} also have all-string
-// values but are not bilingual TextValues.
 function detectBilingual(data) {
   function isBilingualTextValue(val) {
     return (
@@ -71,28 +103,42 @@ function detectBilingual(data) {
     if (checkTextValue(data.meta.description))  return true;
   }
 
-  // sections[].title, sections[].description, questions[].title/context/prompts
+  // sections[].title, sections[].description, questions[].title/context/prompts/options/items/disabled_message
   for (const section of (data.sections || [])) {
     if (checkTextValue(section.title))       return true;
     if (checkTextValue(section.description)) return true;
     for (const q of (section.questions || [])) {
-      if (checkTextValue(q.title))   return true;
-      if (checkTextValue(q.context)) return true;
+      if (checkTextValue(q.title))            return true;
+      if (checkTextValue(q.context))          return true;
+      if (checkTextValue(q.disabled_message)) return true;
       for (const p of (q.prompts || [])) {
         if (checkTextValue(p)) return true;
+      }
+      for (const opt of (q.options || [])) {
+        if (checkTextValue(opt)) return true;
+      }
+      for (const item of (q.items || [])) {
+        if (checkTextValue(item)) return true;
       }
     }
   }
 
-  // summary: title, description, questions[].title/context/prompts
+  // summary
   if (data.summary) {
     if (checkTextValue(data.summary.title))       return true;
     if (checkTextValue(data.summary.description)) return true;
     for (const q of (data.summary.questions || [])) {
-      if (checkTextValue(q.title))   return true;
-      if (checkTextValue(q.context)) return true;
+      if (checkTextValue(q.title))            return true;
+      if (checkTextValue(q.context))          return true;
+      if (checkTextValue(q.disabled_message)) return true;
       for (const p of (q.prompts || [])) {
         if (checkTextValue(p)) return true;
+      }
+      for (const opt of (q.options || [])) {
+        if (checkTextValue(opt)) return true;
+      }
+      for (const item of (q.items || [])) {
+        if (checkTextValue(item)) return true;
       }
     }
   }
@@ -143,7 +189,7 @@ function updateConfirmPill(qid) {
   const confirmLabel = document.getElementById('confirm-label-' + qid);
   const confirmHint  = document.getElementById('confirm-hint-' + qid);
   if (!confirmLabel) return;
-  const hasAnswer = !!answers[qid];
+  const hasAnswer = isAnswered(qid);
   if (hasAnswer) {
     confirmLabel.classList.remove('disabled');
     confirmLabel.title = '';
@@ -167,7 +213,12 @@ function updateDownloadBtn() {
   const hint = document.getElementById('download-hint');
   if (!btn || !questData) return;
   const pending = getAllQids().filter(
-    qid => !skipped.has(qid) && !(answers[qid] && confirmed.has(qid))
+    qid => {
+      // Skip conditionally-disabled questions
+      const wrapper = document.querySelector(`.conditional-wrapper[data-cond-qid="${qid}"]`);
+      if (wrapper && wrapper.classList.contains('cond-disabled')) return false;
+      return !skipped.has(qid) && !(isAnswered(qid) && confirmed.has(qid));
+    }
   );
   if (pending.length === 0) {
     btn.disabled = false;
@@ -236,6 +287,7 @@ function fallbackCopy(text, cb) {
 
 // ── localStorage persistence ──────────────────────────────────────────────
 let saveTimer = null;
+let _suppressSave = false; // set to true after discard/clear to prevent beforeunload re-save
 
 function saveState() {
   const respondent = document.getElementById('respondent-name').value;
@@ -258,12 +310,14 @@ function saveState() {
 }
 
 function scheduleSave() {
+  _suppressSave = false; // re-enable saving on user interaction
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveState, 800);
 }
 
 // Flush on page unload so debounced saves aren't lost on back/refresh
 window.addEventListener('beforeunload', () => {
+  if (_suppressSave) return;
   clearTimeout(saveTimer);
   saveState();
 });
@@ -281,12 +335,10 @@ function restoreState() {
   // Restore answers
   if (stored.answers) {
     for (const [qid, val] of Object.entries(stored.answers)) {
-      const textarea = document.getElementById('ans-' + qid);
-      if (textarea) {
-        textarea.value = val;
-        answers[qid] = val;
-        textarea.classList.add('has-content');
-      }
+      answers[qid] = val;
+      const q = findQuestion(qid);
+      const type = q?.type || 'text';
+      _restoreWidgetVisual(qid, val, type);
     }
   }
 
@@ -299,6 +351,8 @@ function restoreState() {
       skipped.add(qid);
       const textarea = document.getElementById('ans-' + qid);
       if (textarea) { textarea.disabled = true; textarea.classList.remove('has-content'); }
+      const ansArea = document.querySelector(`[id="q-${qid}"] .answer-area`);
+      if (ansArea) ansArea.classList.add('widget-disabled');
       const confirmLabel = document.getElementById('confirm-label-' + qid);
       if (confirmLabel) confirmLabel.classList.add('disabled');
       const confirmCb = document.getElementById('confirm-' + qid);
@@ -329,6 +383,56 @@ function restoreState() {
   }
 }
 
+function _restoreWidgetVisual(qid, val, type) {
+  if (type === 'text' || !type) {
+    const ta = document.getElementById('ans-' + qid);
+    if (ta && val) { ta.value = val; ta.classList.add('has-content'); }
+  } else if (type === 'single-choice') {
+    const q = findQuestion(qid);
+    q?.options?.forEach((opt, i) => {
+      if (plainText(opt) === val) {
+        const radio = document.querySelector(`input[type="radio"][name="choice-${qid}"][value="${i}"]`);
+        if (radio) radio.checked = true;
+      }
+    });
+  } else if (type === 'multiple-choice') {
+    if (Array.isArray(val)) {
+      const q = findQuestion(qid);
+      q?.options?.forEach((opt, i) => {
+        if (val.includes(plainText(opt))) {
+          const cb = document.querySelector(`input[type="checkbox"][data-qid="${qid}"][data-idx="${i}"]`);
+          if (cb) cb.checked = true;
+        }
+      });
+    }
+  } else if (type === 'true-false') {
+    if (typeof val === 'boolean') {
+      document.getElementById(`tf-${val ? 'true' : 'false'}-${qid}`)?.classList.add('selected');
+    }
+  } else if (type === 'ranking') {
+    if (Array.isArray(val)) {
+      const ul = document.getElementById('ranking-' + qid);
+      const q = findQuestion(qid);
+      if (ul && q) {
+        val.forEach((itemText) => {
+          const li = Array.from(ul.querySelectorAll('.ranking-item'))
+            .find(el => plainText(q.items[parseInt(el.dataset.idx)]) === itemText);
+          if (li) ul.appendChild(li);
+        });
+        _updateRankingPositions(ul, qid);
+      }
+    }
+  } else if (type === 'score') {
+    if (typeof val === 'number' && val > 0) {
+      document.querySelectorAll(`[id="stars-${qid}"] .star-btn`).forEach(b =>
+        b.classList.toggle('filled', parseInt(b.dataset.val) <= val)
+      );
+      const d = document.getElementById('score-display-' + qid);
+      if (d) d.textContent = `${val} / ${findQuestion(qid)?.max || 5} ★`;
+    }
+  }
+}
+
 function showRestoreBanner() {
   const main = document.getElementById('main-content');
   if (!main || document.getElementById('restore-banner')) return;
@@ -350,11 +454,39 @@ function showRestoreBanner() {
 }
 
 function discardSavedState() {
+  // Cancel any pending debounced save before we start
+  clearTimeout(saveTimer);
+
   document.getElementById('restore-banner')?.remove();
+  // Reset text widgets
   document.querySelectorAll('textarea[data-qid]').forEach(t => {
     t.value = ''; t.classList.remove('has-content'); t.disabled = false;
   });
+  // Reset choice widgets
+  document.querySelectorAll('input[type="radio"]').forEach(r => r.checked = false);
   document.querySelectorAll('input[type="checkbox"][data-qid]').forEach(c => { c.checked = false; });
+  // Reset true-false
+  document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('selected'));
+  // Reset score
+  document.querySelectorAll('.star-btn').forEach(b => b.classList.remove('filled'));
+  document.querySelectorAll('.score-display').forEach(d => {
+    d.innerHTML = '<span class="en-only">No rating yet</span><span class="zh-only">尚未评分</span>';
+  });
+  // Reset ranking — restore original order (update visuals only, no save)
+  document.querySelectorAll('.ranking-list').forEach(ul => {
+    const qid = ul.id.replace('ranking-', '');
+    const q = findQuestion(qid);
+    if (!q) return;
+    const items = Array.from(ul.querySelectorAll('.ranking-item'));
+    items.sort((a, b) => parseInt(a.dataset.idx) - parseInt(b.dataset.idx));
+    items.forEach(li => ul.appendChild(li));
+    // Update position numbers without triggering save
+    ul.querySelectorAll('.ranking-item').forEach((li, i) => {
+      const posEl = li.querySelector('.ranking-pos');
+      if (posEl) posEl.textContent = i + 1;
+    });
+  });
+
   document.querySelectorAll('.question-block').forEach(b =>
     b.classList.remove('is-skipped', 'is-answered', 'is-confirmed')
   );
@@ -364,11 +496,32 @@ function discardSavedState() {
   Object.keys(answers).forEach(k => delete answers[k]);
   skipped.clear();
   confirmed.clear();
+
+  // Re-seed ranking answers (but don't trigger save)
+  document.querySelectorAll('.ranking-list').forEach(ul => {
+    const qid = ul.id.replace('ranking-', '');
+    const q = findQuestion(qid);
+    if (q) answers[qid] = q.items.map(item => plainText(item));
+  });
+
   document.getElementById('respondent-name').value = '';
+  // Reset widget-disabled
+  document.querySelectorAll('.answer-area.widget-disabled').forEach(el => el.classList.remove('widget-disabled'));
+
   getAllQids().forEach(qid => updateConfirmPill(qid));
   updateProgress();
   updateDownloadBtn();
+
+  // Remove saved state and cancel any pending auto-save; suppress beforeunload save
   localStorage.removeItem(STORAGE_KEY);
+  clearTimeout(saveTimer);
+  _suppressSave = true;
+
+  // Re-evaluate all conditions (all start disabled)
+  getAllQids().forEach(qid => {
+    const q = findQuestion(qid);
+    if (q && q.condition) _applyConditionState(qid, evaluateCondition(q.condition));
+  });
 }
 
 // ── Validation error display ──────────────────────────────────────────────
@@ -454,6 +607,12 @@ function renderQuestionnaire() {
   restoreState();
   updateDownloadBtn();
   initIntersectionObserver();
+
+  // Evaluate all conditions after render
+  getAllQids().forEach(qid => {
+    const q = findQuestion(qid);
+    if (q && q.condition) _applyConditionState(qid, evaluateCondition(q.condition));
+  });
 }
 
 // Helper: check if a TextValue field has any content
@@ -528,19 +687,175 @@ function renderQuestion(q) {
         <span class="zh-only">复制</span>
       </button>
     </div>
-    <div class="answer-area">
-      <label>
-        <span class="en-only">Your Answer:</span>
-        <span class="zh-only">您的回答：</span>
-      </label>
-      <textarea
-        id="ans-${escHtml(q.id)}"
-        data-qid="${escHtml(q.id)}"
-        placeholder="Enter your answer (English or Chinese / 中英文均可)"
-        oninput="onAnswerChange(this)"
-      ></textarea>
-    </div>`;
+    <div class="answer-widget-placeholder"></div>`;
+
+  // Replace placeholder with actual widget
+  const placeholder = block.querySelector('.answer-widget-placeholder');
+  placeholder.replaceWith(renderAnswerWidget(q));
+
+  if (q.condition) {
+    return wrapConditional(block, q);
+  }
   return block;
+}
+
+function wrapConditional(block, q) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'conditional-wrapper';
+  wrapper.dataset.condQid = q.id;
+  wrapper.dataset.watchQid = q.condition.question;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'conditional-overlay';
+  overlay.id = 'cond-overlay-' + q.id;
+  overlay.innerHTML = buildDisabledMessage(q);
+
+  // Start disabled (overlay visible) — conditions evaluated after render
+  wrapper.classList.add('cond-disabled');
+
+  wrapper.appendChild(block);
+  wrapper.appendChild(overlay);
+  return wrapper;
+}
+
+// ── Answer widget rendering ────────────────────────────────────────────────
+function renderAnswerWidget(q) {
+  const type = q.type || 'text';
+  if (type === 'single-choice')   return renderSingleChoiceWidget(q);
+  if (type === 'multiple-choice') return renderMultipleChoiceWidget(q);
+  if (type === 'true-false')      return renderTrueFalseWidget(q);
+  if (type === 'ranking')         return renderRankingWidget(q);
+  if (type === 'score')           return renderScoreWidget(q);
+  return renderTextWidget(q);
+}
+
+function renderTextWidget(q) {
+  const div = document.createElement('div');
+  div.className = 'answer-area';
+  div.innerHTML = `
+    <label>
+      <span class="en-only">Your Answer:</span>
+      <span class="zh-only">您的回答：</span>
+    </label>
+    <textarea
+      id="ans-${escHtml(q.id)}"
+      data-qid="${escHtml(q.id)}"
+      placeholder="Enter your answer (English or Chinese / 中英文均可)"
+      oninput="onAnswerChange(this)"
+    ></textarea>`;
+  return div;
+}
+
+function renderSingleChoiceWidget(q) {
+  const qid = q.id;
+  const div = document.createElement('div');
+  div.className = 'answer-area choice-area';
+  const optionsHtml = q.options.map((opt, i) =>
+    `<label class="choice-option">
+      <input type="radio" name="choice-${escHtml(qid)}" value="${i}" onchange="onChoiceChange(this,'${escHtml(qid)}','single')">
+      <span class="choice-text">${txt(opt)}</span>
+    </label>`
+  ).join('');
+  div.innerHTML = `<div class="choice-group">${optionsHtml}</div>`;
+  return div;
+}
+
+function renderMultipleChoiceWidget(q) {
+  const qid = q.id;
+  const div = document.createElement('div');
+  div.className = 'answer-area choice-area';
+  const optionsHtml = q.options.map((opt, i) =>
+    `<label class="choice-option">
+      <input type="checkbox" data-qid="${escHtml(qid)}" data-idx="${i}" onchange="onChoiceChange(this,'${escHtml(qid)}','multiple')">
+      <span class="choice-text">${txt(opt)}</span>
+    </label>`
+  ).join('');
+  div.innerHTML = `<div class="choice-group">${optionsHtml}</div>`;
+  return div;
+}
+
+function renderTrueFalseWidget(q) {
+  const qid = q.id;
+  const div = document.createElement('div');
+  div.className = 'answer-area true-false-area';
+  div.innerHTML = `
+    <div class="tf-group">
+      <button class="tf-btn" id="tf-true-${escHtml(qid)}" onclick="onTrueFalseClick('${escHtml(qid)}', true)">
+        <span class="en-only">True</span><span class="zh-only">是</span>
+      </button>
+      <button class="tf-btn" id="tf-false-${escHtml(qid)}" onclick="onTrueFalseClick('${escHtml(qid)}', false)">
+        <span class="en-only">False</span><span class="zh-only">否</span>
+      </button>
+    </div>`;
+  return div;
+}
+
+function renderRankingWidget(q) {
+  const qid = q.id;
+  const div = document.createElement('div');
+  div.className = 'answer-area ranking-area';
+
+  const ul = document.createElement('ul');
+  ul.className = 'ranking-list';
+  ul.id = 'ranking-' + qid;
+
+  q.items.forEach((item, i) => {
+    const li = document.createElement('li');
+    li.className = 'ranking-item';
+    li.draggable = true;
+    li.dataset.idx = i;
+    li.innerHTML = `<span class="drag-handle">⠿</span><span class="ranking-pos">${i + 1}</span><span class="ranking-text">${txt(item)}</span>`;
+    ul.appendChild(li);
+  });
+
+  div.appendChild(ul);
+  initRankingDragDrop(ul, qid);
+
+  // Seed the answer with the default order
+  answers[qid] = q.items.map(item => plainText(item));
+
+  return div;
+}
+
+function renderScoreWidget(q) {
+  const qid = q.id;
+  const div = document.createElement('div');
+  div.className = 'answer-area score-area';
+
+  const starGroup = document.createElement('div');
+  starGroup.className = 'star-group';
+  starGroup.id = 'stars-' + qid;
+
+  for (let i = 1; i <= 5; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'star-btn';
+    btn.dataset.val = i;
+    btn.textContent = '★';
+    btn.onclick = () => onScoreClick(qid, i);
+    starGroup.appendChild(btn);
+  }
+
+  // Hover preview
+  starGroup.addEventListener('mouseover', e => {
+    const btn = e.target.closest('.star-btn');
+    if (!btn) return;
+    const hoverVal = parseInt(btn.dataset.val);
+    starGroup.querySelectorAll('.star-btn').forEach(b => {
+      b.classList.toggle('hover-preview', parseInt(b.dataset.val) <= hoverVal);
+    });
+  });
+  starGroup.addEventListener('mouseleave', () => {
+    starGroup.querySelectorAll('.star-btn').forEach(b => b.classList.remove('hover-preview'));
+  });
+
+  const display = document.createElement('div');
+  display.className = 'score-display';
+  display.id = 'score-display-' + qid;
+  display.innerHTML = '<span class="en-only">No rating yet</span><span class="zh-only">尚未评分</span>';
+
+  div.appendChild(starGroup);
+  div.appendChild(display);
+  return div;
 }
 
 // ── Build TOC ──────────────────────────────────────────────────────────────
@@ -586,7 +901,7 @@ function updateTocItem(qid) {
     el.classList.add('state-skipped');
   } else if (confirmed.has(qid)) {
     el.classList.add('state-confirmed');
-  } else if (answers[qid]) {
+  } else if (isAnswered(qid)) {
     el.classList.add('state-answered');
   }
 }
@@ -600,7 +915,7 @@ function updateBlockClass(qid) {
     block.classList.add('is-skipped');
   } else if (confirmed.has(qid)) {
     block.classList.add('is-confirmed');
-  } else if (answers[qid]) {
+  } else if (isAnswered(qid)) {
     block.classList.add('is-answered');
   }
 }
@@ -608,12 +923,13 @@ function updateBlockClass(qid) {
 // ── Progress ───────────────────────────────────────────────────────────────
 function updateProgress() {
   let total = 0, nConfirmed = 0, nAnswered = 0, nSkipped = 0;
-  document.querySelectorAll('textarea[data-qid]').forEach(t => {
+  document.querySelectorAll('.question-block[data-qid]').forEach(block => {
+    if (block.closest('.cond-disabled')) return; // disabled conditional — skip
     total++;
-    const qid = t.dataset.qid;
+    const qid = block.dataset.qid;
     if (skipped.has(qid))        nSkipped++;
     else if (confirmed.has(qid)) nConfirmed++;
-    else if (answers[qid])       nAnswered++;
+    else if (isAnswered(qid))    nAnswered++;
   });
   const done = nConfirmed + nAnswered + nSkipped;
   const pct  = total > 0 ? Math.round(done / total * 100) : 0;
@@ -626,7 +942,7 @@ function updateProgress() {
   document.getElementById('mob-prog-label').textContent = `${done}/${total} (${pct}%)`;
 }
 
-// ── Answer change ─────────────────────────────────────────────────────────
+// ── Answer change (text) ──────────────────────────────────────────────────
 function onAnswerChange(textarea) {
   const qid = textarea.dataset.qid;
   const val = textarea.value.trim();
@@ -637,35 +953,188 @@ function onAnswerChange(textarea) {
     delete answers[qid];
     textarea.classList.remove('has-content');
   }
+  _afterAnswerChange(qid);
+}
+
+// ── Choice change (single/multiple) ───────────────────────────────────────
+function onChoiceChange(input, qid, mode) {
+  const q = findQuestion(qid);
+  if (mode === 'single') {
+    answers[qid] = plainText(q.options[parseInt(input.value)]);
+  } else {
+    const checked = document.querySelectorAll(`input[type="checkbox"][data-qid="${qid}"]:checked`);
+    if (checked.length > 0) {
+      answers[qid] = Array.from(checked).map(c => plainText(q.options[parseInt(c.dataset.idx)]));
+    } else {
+      delete answers[qid];
+    }
+  }
+  _afterAnswerChange(qid);
+}
+
+// ── True/False click ──────────────────────────────────────────────────────
+function onTrueFalseClick(qid, value) {
+  if (answers[qid] === value) {
+    delete answers[qid];
+    document.getElementById('tf-true-' + qid)?.classList.remove('selected');
+    document.getElementById('tf-false-' + qid)?.classList.remove('selected');
+  } else {
+    answers[qid] = value;
+    document.getElementById('tf-true-' + qid)?.classList.toggle('selected', value === true);
+    document.getElementById('tf-false-' + qid)?.classList.toggle('selected', value === false);
+  }
+  _afterAnswerChange(qid);
+}
+
+// ── Score click ───────────────────────────────────────────────────────────
+function onScoreClick(qid, value) {
+  if (answers[qid] === value) {
+    delete answers[qid];
+    document.querySelectorAll(`[id="stars-${qid}"] .star-btn`).forEach(b => b.classList.remove('filled'));
+    const display = document.getElementById('score-display-' + qid);
+    if (display) display.innerHTML = '<span class="en-only">No rating yet</span><span class="zh-only">尚未评分</span>';
+  } else {
+    answers[qid] = value;
+    document.querySelectorAll(`[id="stars-${qid}"] .star-btn`).forEach(b =>
+      b.classList.toggle('filled', parseInt(b.dataset.val) <= value)
+    );
+    const display = document.getElementById('score-display-' + qid);
+    if (display) display.textContent = `${value} / ${findQuestion(qid)?.max || 5} ★`;
+  }
+  _afterAnswerChange(qid);
+}
+
+// ── Ranking drag-and-drop ─────────────────────────────────────────────────
+function initRankingDragDrop(ul, qid) {
+  let dragging = null;
+
+  ul.addEventListener('dragstart', e => {
+    dragging = e.target.closest('.ranking-item');
+    dragging?.classList.add('dragging');
+  });
+  ul.addEventListener('dragend', () => {
+    dragging?.classList.remove('dragging');
+    ul.querySelectorAll('.ranking-item').forEach(li => li.classList.remove('drag-over'));
+    dragging = null;
+  });
+  ul.addEventListener('dragover', e => {
+    e.preventDefault();
+    const over = e.target.closest('.ranking-item');
+    if (!over || over === dragging) return;
+    ul.querySelectorAll('.ranking-item').forEach(li => li.classList.remove('drag-over'));
+    over.classList.add('drag-over');
+    const items = [...ul.querySelectorAll('.ranking-item')];
+    const overIdx = items.indexOf(over);
+    const dragIdx = items.indexOf(dragging);
+    if (dragIdx < overIdx) {
+      ul.insertBefore(dragging, over.nextSibling);
+    } else {
+      ul.insertBefore(dragging, over);
+    }
+  });
+  ul.addEventListener('drop', e => {
+    e.preventDefault();
+    ul.querySelectorAll('.ranking-item').forEach(li => li.classList.remove('drag-over'));
+    _updateRankingPositions(ul, qid);
+  });
+}
+
+function _updateRankingPositions(ul, qid) {
+  const q = findQuestion(qid);
+  const items = ul.querySelectorAll('.ranking-item');
+  items.forEach((li, i) => {
+    const posEl = li.querySelector('.ranking-pos');
+    if (posEl) posEl.textContent = i + 1;
+  });
+  answers[qid] = Array.from(items).map(li => plainText(q.items[parseInt(li.dataset.idx)]));
+  _afterAnswerChange(qid);
+}
+
+// ── Shared post-answer-change tail ────────────────────────────────────────
+function _afterAnswerChange(qid) {
   updateTocItem(qid);
   updateBlockClass(qid);
   updateProgress();
   updateConfirmPill(qid);
   updateDownloadBtn();
+  updateConditionalsDependingOn(qid);
   scheduleSave();
+}
+
+// ── Conditional logic ─────────────────────────────────────────────────────
+function updateConditionalsDependingOn(watchQid) {
+  getAllQids().forEach(qid => {
+    const q = findQuestion(qid);
+    if (q?.condition?.question === watchQid) {
+      _applyConditionState(qid, evaluateCondition(q.condition));
+    }
+  });
+}
+
+function _applyConditionState(qid, satisfied) {
+  const wrapper = document.querySelector(`.conditional-wrapper[data-cond-qid="${qid}"]`);
+  if (!wrapper) return;
+  const overlay = document.getElementById('cond-overlay-' + qid);
+  wrapper.classList.toggle('cond-disabled', !satisfied);
+  if (overlay) overlay.style.display = satisfied ? 'none' : '';
+  if (!satisfied && isAnswered(qid)) {
+    delete answers[qid];
+    confirmed.delete(qid);
+    _resetWidgetVisual(qid);
+    updateTocItem(qid);
+    updateBlockClass(qid);
+    updateConfirmPill(qid);
+    saveState();
+  }
+}
+
+function _resetWidgetVisual(qid) {
+  const q = findQuestion(qid);
+  const type = q?.type || 'text';
+  if (type === 'text') {
+    const ta = document.getElementById('ans-' + qid);
+    if (ta) { ta.value = ''; ta.classList.remove('has-content'); }
+  } else if (type === 'single-choice') {
+    document.querySelectorAll(`input[type="radio"][name="choice-${qid}"]`).forEach(r => r.checked = false);
+  } else if (type === 'multiple-choice') {
+    document.querySelectorAll(`input[type="checkbox"][data-qid="${qid}"]`).forEach(c => c.checked = false);
+  } else if (type === 'true-false') {
+    document.getElementById('tf-true-' + qid)?.classList.remove('selected');
+    document.getElementById('tf-false-' + qid)?.classList.remove('selected');
+  } else if (type === 'score') {
+    document.querySelectorAll(`[id="stars-${qid}"] .star-btn`).forEach(b => b.classList.remove('filled'));
+    const d = document.getElementById('score-display-' + qid);
+    if (d) d.innerHTML = '<span class="en-only">No rating yet</span><span class="zh-only">尚未评分</span>';
+  }
+  // ranking: keep current visual order
 }
 
 // ── Skip change ───────────────────────────────────────────────────────────
 function onSkipChange(checkbox) {
   const qid = checkbox.dataset.qid;
+  const block        = document.getElementById('q-' + qid);
   const textarea     = document.getElementById('ans-' + qid);
+  const ansArea      = block?.querySelector('.answer-area');
   const confirmLabel = document.getElementById('confirm-label-' + qid);
   const confirmCb    = document.getElementById('confirm-' + qid);
 
   if (checkbox.checked) {
     skipped.add(qid);
-    textarea.disabled = true;
-    textarea.classList.remove('has-content');
+    if (textarea) { textarea.disabled = true; textarea.classList.remove('has-content'); }
+    if (ansArea) ansArea.classList.add('widget-disabled');
     confirmed.delete(qid);
-    confirmCb.checked = false;
-    confirmLabel.classList.add('disabled');
+    if (confirmCb) confirmCb.checked = false;
+    if (confirmLabel) confirmLabel.classList.add('disabled');
   } else {
     skipped.delete(qid);
-    textarea.disabled = false;
-    if (textarea.value.trim()) {
-      answers[qid] = textarea.value.trim();
-      textarea.classList.add('has-content');
+    if (textarea) {
+      textarea.disabled = false;
+      if (textarea.value.trim()) {
+        answers[qid] = textarea.value.trim();
+        textarea.classList.add('has-content');
+      }
     }
+    if (ansArea) ansArea.classList.remove('widget-disabled');
     updateConfirmPill(qid);
   }
   updateTocItem(qid);
@@ -743,17 +1212,45 @@ function clearAll() {
   document.querySelectorAll('textarea[data-qid]').forEach(t => {
     t.value = ''; t.classList.remove('has-content'); t.disabled = false;
   });
+  document.querySelectorAll('input[type="radio"]').forEach(r => r.checked = false);
   document.querySelectorAll('input[type="checkbox"][data-qid]').forEach(c => {
     c.checked = false;
   });
+  document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('selected'));
+  document.querySelectorAll('.star-btn').forEach(b => b.classList.remove('filled'));
+  document.querySelectorAll('.score-display').forEach(d => {
+    d.innerHTML = '<span class="en-only">No rating yet</span><span class="zh-only">尚未评分</span>';
+  });
+  // Reset ranking to original order (update visuals only, no save trigger)
+  document.querySelectorAll('.ranking-list').forEach(ul => {
+    const qid = ul.id.replace('ranking-', '');
+    const q = findQuestion(qid);
+    if (!q) return;
+    const items = Array.from(ul.querySelectorAll('.ranking-item'));
+    items.sort((a, b) => parseInt(a.dataset.idx) - parseInt(b.dataset.idx));
+    items.forEach(li => ul.appendChild(li));
+    ul.querySelectorAll('.ranking-item').forEach((li, i) => {
+      const posEl = li.querySelector('.ranking-pos');
+      if (posEl) posEl.textContent = i + 1;
+    });
+  });
+
   document.querySelectorAll('.confirm-pill').forEach(l => l.classList.remove('disabled'));
   document.querySelectorAll('.question-block').forEach(b =>
     b.classList.remove('is-skipped', 'is-answered', 'is-confirmed')
   );
+  document.querySelectorAll('.answer-area.widget-disabled').forEach(el => el.classList.remove('widget-disabled'));
 
   Object.keys(answers).forEach(k => delete answers[k]);
   skipped.clear();
   confirmed.clear();
+
+  // Re-seed ranking answers
+  document.querySelectorAll('.ranking-list').forEach(ul => {
+    const qid = ul.id.replace('ranking-', '');
+    const q = findQuestion(qid);
+    if (q) answers[qid] = q.items.map(item => plainText(item));
+  });
 
   document.querySelectorAll('.toc-q-item').forEach(el =>
     el.classList.remove('state-answered', 'state-confirmed', 'state-skipped')
@@ -762,6 +1259,14 @@ function clearAll() {
   updateProgress();
   updateDownloadBtn();
   localStorage.removeItem(STORAGE_KEY);
+  clearTimeout(saveTimer);
+  _suppressSave = true;
+
+  // Re-evaluate conditions
+  getAllQids().forEach(qid => {
+    const q = findQuestion(qid);
+    if (q && q.condition) _applyConditionState(qid, evaluateCondition(q.condition));
+  });
 }
 
 // ── Download answers ──────────────────────────────────────────────────────

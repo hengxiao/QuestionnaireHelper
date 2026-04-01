@@ -18,6 +18,17 @@
   }
 
   /**
+   * isTextValueArray — returns true if val is a non-empty array where every
+   * element satisfies isTextValue.
+   */
+  function isTextValueArray(val) {
+    if (!Array.isArray(val) || val.length === 0) return false;
+    return val.every(item => isTextValue(item));
+  }
+
+  const VALID_TYPES = ['text', 'single-choice', 'multiple-choice', 'true-false', 'ranking', 'score'];
+
+  /**
    * validateYAML — validates a parsed YAML object against the questionnaire schema.
    * Returns an array of human-readable error messages (empty array = valid).
    */
@@ -118,8 +129,64 @@
             if (q.prompts !== undefined && !Array.isArray(q.prompts)) {
               errors.push(`${qPrefix}.prompts must be an array if present.`);
             }
+
+            // type validation
+            if (q.type !== undefined) {
+              if (!VALID_TYPES.includes(q.type)) {
+                errors.push(`${qPrefix}.type "${q.type}" is not valid. Must be one of: ${VALID_TYPES.join(', ')}.`);
+              } else {
+                // type-specific field validation
+                if (q.type === 'single-choice' || q.type === 'multiple-choice') {
+                  if (!isTextValueArray(q.options)) {
+                    errors.push(`${qPrefix}.options must be a non-empty array of TextValues for type "${q.type}".`);
+                  }
+                }
+                if (q.type === 'ranking') {
+                  if (!isTextValueArray(q.items)) {
+                    errors.push(`${qPrefix}.items must be a non-empty array of TextValues for type "ranking".`);
+                  }
+                }
+              }
+            }
+
+            // condition validation
+            if (q.condition !== undefined) {
+              if (!q.condition || typeof q.condition !== 'object' || Array.isArray(q.condition)) {
+                errors.push(`${qPrefix}.condition must be an object if present.`);
+              } else {
+                const c = q.condition;
+                if (typeof c.question !== 'string' || c.question.trim().length === 0) {
+                  errors.push(`${qPrefix}.condition.question must be a non-empty string.`);
+                }
+                // Exactly one trigger key
+                const triggerKeys = ['equals', 'includes', 'min_score', 'answered'];
+                const presentTriggers = triggerKeys.filter(k => c[k] !== undefined);
+                if (presentTriggers.length === 0) {
+                  errors.push(`${qPrefix}.condition must have exactly one of: ${triggerKeys.join(', ')}.`);
+                } else if (presentTriggers.length > 1) {
+                  errors.push(`${qPrefix}.condition has multiple trigger keys (${presentTriggers.join(', ')}); only one is allowed.`);
+                }
+                // disabled_message, if present, must be TextValue
+                if (q.disabled_message !== undefined && !isTextValue(q.disabled_message)) {
+                  errors.push(`${qPrefix}.disabled_message must be a non-empty string or bilingual object if present.`);
+                }
+              }
+            }
           });
         }
+      });
+
+      // Second pass: check condition.question references
+      data.sections.forEach((section, si) => {
+        if (!section || !Array.isArray(section.questions)) return;
+        section.questions.forEach((q, qi) => {
+          if (!q || !q.condition || typeof q.condition.question !== 'string') return;
+          const refId = q.condition.question;
+          if (!allQuestionIds.has(refId) && !summaryQIds.includes(refId)) {
+            const qPrefix = `sections[${si}].questions[${qi}]`;
+            errors.push(`${qPrefix}.condition.question references "${refId}" which does not exist.`);
+          }
+        });
       });
 
       // Rule 9: validate optional summary
@@ -165,6 +232,46 @@
               if (q.prompts !== undefined && !Array.isArray(q.prompts)) {
                 errors.push(`${qPrefix}.prompts must be an array if present.`);
               }
+
+              // type validation
+              if (q.type !== undefined) {
+                if (!VALID_TYPES.includes(q.type)) {
+                  errors.push(`${qPrefix}.type "${q.type}" is not valid. Must be one of: ${VALID_TYPES.join(', ')}.`);
+                } else {
+                  if (q.type === 'single-choice' || q.type === 'multiple-choice') {
+                    if (!isTextValueArray(q.options)) {
+                      errors.push(`${qPrefix}.options must be a non-empty array of TextValues for type "${q.type}".`);
+                    }
+                  }
+                  if (q.type === 'ranking') {
+                    if (!isTextValueArray(q.items)) {
+                      errors.push(`${qPrefix}.items must be a non-empty array of TextValues for type "ranking".`);
+                    }
+                  }
+                }
+              }
+
+              // condition validation for summary questions
+              if (q.condition !== undefined) {
+                if (!q.condition || typeof q.condition !== 'object' || Array.isArray(q.condition)) {
+                  errors.push(`${qPrefix}.condition must be an object if present.`);
+                } else {
+                  const c = q.condition;
+                  if (typeof c.question !== 'string' || c.question.trim().length === 0) {
+                    errors.push(`${qPrefix}.condition.question must be a non-empty string.`);
+                  }
+                  const triggerKeys = ['equals', 'includes', 'min_score', 'answered'];
+                  const presentTriggers = triggerKeys.filter(k => c[k] !== undefined);
+                  if (presentTriggers.length === 0) {
+                    errors.push(`${qPrefix}.condition must have exactly one of: ${triggerKeys.join(', ')}.`);
+                  } else if (presentTriggers.length > 1) {
+                    errors.push(`${qPrefix}.condition has multiple trigger keys (${presentTriggers.join(', ')}); only one is allowed.`);
+                  }
+                  if (q.disabled_message !== undefined && !isTextValue(q.disabled_message)) {
+                    errors.push(`${qPrefix}.disabled_message must be a non-empty string or bilingual object if present.`);
+                  }
+                }
+              }
             });
           }
         }
@@ -174,5 +281,5 @@
     return errors;
   }
 
-  return { validateYAML, isTextValue };
+  return { validateYAML, isTextValue, isTextValueArray };
 }));

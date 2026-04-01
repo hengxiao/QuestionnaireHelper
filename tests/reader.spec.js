@@ -7,7 +7,7 @@ const fs   = require('fs');
 const URL = '/reader.html?yaml=example.yaml';
 
 // ── Fixtures ───────────────────────────────────────────────────────────────
-// Uses only question IDs present in example.yaml: Q1.1, Q1.2, Q2.1, S1
+// Uses question IDs present in example.yaml: Q1.1, Q1.2, Q1.3, Q1.4, Q2.1, Q2.2, Q2.3, Q2.4, Q2.5, S1
 
 const ALICE_YAML = `
 meta:
@@ -16,7 +16,13 @@ meta:
   questionnaire: Sample Feedback Survey
 answers:
   Q1.1: Alice answer to Q1.1
+  Q1.3: Social media
+  Q1.4: 4
   Q2.1: Alice answer to Q2.1
+  Q2.2:
+    - Communication
+    - Quality of output
+  Q2.3: false
 confirmed:
   - Q1.1
 skipped:
@@ -30,6 +36,7 @@ meta:
   questionnaire: Sample Feedback Survey
 answers:
   Q1.1: Bob answer to Q1.1
+  Q2.3: true
 confirmed: []
 skipped:
   - Q2.1
@@ -274,5 +281,26 @@ test.describe('Language toggle', () => {
     await page.waitForSelector('#lang-bar:not([style*="display: none"])');
     await page.getByRole('button', { name: '仅中文' }).click();
     await expect(page.locator('body')).toHaveClass(/lang-zh/);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+
+test.describe('New answer type display', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto(URL);
+    await loadFile(page, aliceFile);
+  });
+
+  test('boolean false renders as "False" for Q2.3', async ({ page }) => {
+    await expect(page.locator('[data-qid="Q2.3"] .answer-text')).toContainText('False');
+  });
+
+  test('score 4 renders as "4 / 5 ★" for Q1.4', async ({ page }) => {
+    await expect(page.locator('[data-qid="Q1.4"] .answer-text')).toContainText('4 / 5 ★');
+  });
+
+  test('multiple-choice array renders as comma-joined string for Q2.2', async ({ page }) => {
+    await expect(page.locator('[data-qid="Q2.2"] .answer-text')).toContainText('Communication');
   });
 });

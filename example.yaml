@@ -13,9 +13,6 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── meta (required) ──────────────────────────────────────────────────────────
-# Contains metadata about the questionnaire itself.
-#   title        (required) TextValue — shown in the page header and browser tab
-#   organization (optional) TextValue — shown below the title in the header
 meta:
   title:
     en: "Sample Feedback Survey"
@@ -25,19 +22,6 @@ meta:
     zh: "示例组织"
 
 # ── sections (required) ──────────────────────────────────────────────────────
-# A non-empty array of section objects. Each section groups related questions.
-#
-# Section fields:
-#   id          (required) string    — unique identifier, used in TOC anchors
-#   title       (required) TextValue — section heading
-#   description (optional) TextValue — shown below the heading in smaller text
-#   questions   (required) non-empty array of question objects
-#
-# Question fields:
-#   id      (required) string    — unique across ALL questions (sections + summary)
-#   title   (required) TextValue — the question text shown to the respondent
-#   context (optional) TextValue — additional context shown below the title
-#   prompts (optional) array of TextValue — bullet points guiding the response
 sections:
   - id: "1"
     title:
@@ -51,14 +35,35 @@ sections:
         title:
           en: "How would you rate the overall experience?"
           zh: "您如何评价整体体验？"
-        # prompts: array of TextValue — each item is a bullet guiding the answer
         prompts:
           - en: "Consider all aspects of the experience"
             zh: "请考虑体验的各个方面"
+
       - id: "Q1.2"
         title:
           en: "What was the highlight for you?"
           zh: "您认为最精彩的部分是什么？"
+
+      - id: "Q1.3"
+        type: single-choice
+        title:
+          en: "How did you hear about us?"
+          zh: "您是如何了解到我们的？"
+        options:
+          - en: "Social media"
+            zh: "社交媒体"
+          - en: "Friend or colleague"
+            zh: "朋友或同事"
+          - en: "Online search"
+            zh: "网络搜索"
+          - en: "Other"
+            zh: "其他"
+
+      - id: "Q1.4"
+        type: score
+        title:
+          en: "How satisfied are you overall? (1–5 stars)"
+          zh: "您的整体满意度如何？（1–5 星）"
 
   - id: "2"
     title:
@@ -69,19 +74,59 @@ sections:
         title:
           en: "What improvements would you suggest?"
           zh: "您有哪些改进建议？"
-        # context: additional framing shown beneath the question title
         context:
           en: "Be as specific as possible."
           zh: "请尽量具体。"
 
+      - id: "Q2.2"
+        type: multiple-choice
+        title:
+          en: "Which areas need the most improvement? (select all that apply)"
+          zh: "哪些方面最需要改进？（可多选）"
+        options:
+          - en: "Communication"
+            zh: "沟通交流"
+          - en: "Speed / efficiency"
+            zh: "速度与效率"
+          - en: "Quality of output"
+            zh: "成果质量"
+          - en: "Support & follow-up"
+            zh: "支持与跟进"
+
+      - id: "Q2.3"
+        type: true-false
+        title:
+          en: "Would you recommend us to a friend or colleague?"
+          zh: "您会向朋友或同事推荐我们吗？"
+
+      - id: "Q2.4"
+        type: ranking
+        title:
+          en: "Please rank the following factors by importance to you (drag to reorder)."
+          zh: "请按照对您的重要程度对以下因素排序（拖动排序）。"
+        items:
+          - en: "Price"
+            zh: "价格"
+          - en: "Quality"
+            zh: "质量"
+          - en: "Speed"
+            zh: "速度"
+          - en: "Customer support"
+            zh: "客户支持"
+
+      - id: "Q2.5"
+        type: text
+        title:
+          en: "If you would NOT recommend us, please explain why."
+          zh: "如果您不会推荐我们，请说明原因。"
+        condition:
+          question: "Q2.3"
+          equals: "false"
+        disabled_message:
+          en: 'This question is only available if you answered "No" to the previous question.'
+          zh: '此题仅在您对上一题回答「否」时开放。'
+
 # ── summary (optional) ───────────────────────────────────────────────────────
-# An optional closing section rendered with a distinct style (dark header).
-# If omitted entirely, no summary section is shown.
-#
-# Summary fields:
-#   title       (required) TextValue — heading for the summary section
-#   description (optional) TextValue — shown below the heading
-#   questions   (required) non-empty array of question objects (same schema as above)
 summary:
   title:
     en: "Final Thoughts"
@@ -91,6 +136,7 @@ summary:
     zh: "如有其他意见，请在此填写。"
   questions:
     - id: "S1"
+      type: text
       title:
         en: "Any additional comments?"
         zh: "还有其他意见吗？"
