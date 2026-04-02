@@ -27,12 +27,16 @@
   --yellow-bg:     #fffbeb;
 
   --toc-width: 240px;
+
+  /* Themeable via settings.yaml */
+  --primary-dark: #2d5a9e;
+  --font:         -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --radius:       10px;
 }
 
 /* ── Base typography ───────────────────────────────────────────────────── */
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-               "Microsoft YaHei", sans-serif;
+  font-family: var(--font);
   background: var(--bg);
   color: var(--text);
   line-height: 1.6;
@@ -249,6 +253,7 @@ header .sub {
   display: flex;
   align-items: center;
   gap: 7px;
+  min-width: 0;
   padding: 4px 14px;
   text-decoration: none;
   cursor: pointer;
@@ -283,11 +288,26 @@ header .sub {
   font-weight: 600;
   color: var(--text-muted);
   transition: color 0.2s;
+  flex-shrink: 0;
 }
 .toc-q-item.is-active      .toc-qid { color: var(--primary); font-weight: 700; }
 .toc-q-item.state-answered  .toc-qid { color: var(--blue); }
 .toc-q-item.state-confirmed .toc-qid { color: var(--green); }
 .toc-q-item.state-skipped   .toc-qid { color: var(--yellow); }
+
+.toc-qtitle {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-width: 0;
+  opacity: 0.75;
+}
+.toc-q-item.is-active      .toc-qtitle { color: var(--primary); opacity: 1; }
+.toc-q-item.state-answered  .toc-qtitle { color: var(--blue);   opacity: 0.85; }
+.toc-q-item.state-confirmed .toc-qtitle { color: var(--green);  opacity: 0.85; }
+.toc-q-item.state-skipped   .toc-qtitle { color: var(--yellow); opacity: 0.85; }
 
 /* ── TOC Overlay (mobile backdrop) ────────────────────────────────────── */
 .toc-overlay {
@@ -317,6 +337,7 @@ header .sub {
   background: var(--card);
   border: 1px solid var(--border);
   border-left: 4px solid var(--primary);
+  border-radius: var(--radius);
   border-radius: 10px;
   padding: 16px 20px;
   margin-bottom: 20px;
@@ -433,7 +454,7 @@ header .sub {
 .section-card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius);
   margin-bottom: 22px;
   overflow: hidden;
   box-shadow: 0 1px 4px rgba(0,0,0,0.06);

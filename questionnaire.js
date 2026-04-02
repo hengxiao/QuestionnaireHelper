@@ -6,9 +6,39 @@ const confirmed = new Set();   // confirmed qids
 let currentLang = 'both';
 let tocIsOpen   = false;
 
+// ── Settings ───────────────────────────────────────────────────────────────
+let appSettings = {};   // populated by loadSettings()
+
+async function loadSettings() {
+  try {
+    const resp = await fetch('settings.yaml');
+    if (resp.ok) appSettings = jsyaml.load(await resp.text()) || {};
+  } catch { /* settings.yaml is optional */ }
+  applyTheme(appSettings.theme || {});
+}
+
+function applyTheme(theme) {
+  const root = document.documentElement;
+  if (theme.primary_color)  root.style.setProperty('--primary',     theme.primary_color);
+  if (theme.accent_color)   root.style.setProperty('--primary-dark', theme.accent_color);
+  if (theme.font_family)    root.style.setProperty('--font',         theme.font_family);
+  if (theme.border_radius)  root.style.setProperty('--radius',       theme.border_radius);
+}
+
 // ── YAML source & storage key ──────────────────────────────────────────────
-const yamlUrl    = new URLSearchParams(location.search).get('yaml') || 'questionnaire.yaml';
-const STORAGE_KEY = 'qhelper-' + yamlUrl.replace(/[^a-z0-9]/gi, '-');
+const _urlParam = new URLSearchParams(location.search).get('yaml');
+// yamlUrl is resolved after settings load; use a getter so it stays reactive
+let _resolvedYamlUrl = null;
+function getYamlUrl() {
+  if (_resolvedYamlUrl) return _resolvedYamlUrl;
+  _resolvedYamlUrl = _urlParam || appSettings.default_yaml || 'questionnaire.yaml';
+  return _resolvedYamlUrl;
+}
+
+// Storage key is keyed to the yaml file so different questionnaires don't share state
+function getStorageKey() {
+  return 'qhelper-' + getYamlUrl().replace(/[^a-z0-9]/gi, '-');
+}
 
 // ── HTML escaping ──────────────────────────────────────────────────────────
 function escHtml(str) {
@@ -298,7 +328,7 @@ function saveState() {
     confirmed: [...confirmed]
   };
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(getStorageKey(), JSON.stringify(state));
   } catch(e) { /* storage full or private browsing — ignore */ }
   // Flash auto-save indicator
   const el = document.getElementById('autosave-status');
@@ -324,7 +354,7 @@ window.addEventListener('beforeunload', () => {
 
 function restoreState() {
   let stored;
-  try { stored = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch(e) { return; }
+  try { stored = JSON.parse(localStorage.getItem(getStorageKey())); } catch(e) { return; }
   if (!stored) return;
 
   // Restore name
@@ -513,7 +543,7 @@ function discardSavedState() {
   updateDownloadBtn();
 
   // Remove saved state and cancel any pending auto-save; suppress beforeunload save
-  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(getStorageKey());
   clearTimeout(saveTimer);
   _suppressSave = true;
 
@@ -531,7 +561,7 @@ function showValidationErrors(errors) {
   main.innerHTML = `
     <div class="validation-error-panel">
       <h2>YAML Validation Failed</h2>
-      <div class="yaml-url">${escHtml(yamlUrl)}</div>
+      <div class="yaml-url">${escHtml(getYamlUrl())}</div>
       <ul>${listItems}</ul>
     </div>`;
 }
@@ -539,7 +569,7 @@ function showValidationErrors(errors) {
 // ── Load YAML ─────────────────────────────────────────────────────────────
 async function loadQuestionnaire() {
   try {
-    const resp = await fetch(yamlUrl);
+    const resp = await fetch(getYamlUrl());
     if (!resp.ok) throw new Error(`Failed to fetch ${yamlUrl} (HTTP ${resp.status})`);
     questData = jsyaml.load(await resp.text());
 
@@ -571,7 +601,7 @@ async function loadQuestionnaire() {
     document.getElementById('main-content').innerHTML =
       `<div class="loading" style="color:#c62828">
         <p>Error loading questionnaire: ${escHtml(e.message)}</p>
-        <p style="margin-top:8px;font-size:0.85rem">Make sure the YAML file is accessible at: <code>${escHtml(yamlUrl)}</code></p>
+        <p style="margin-top:8px;font-size:0.85rem">Make sure the YAML file is accessible at: <code>${escHtml(getYamlUrl())}</code></p>
       </div>`;
   }
 }
@@ -874,7 +904,10 @@ function buildToc() {
       a.className = 'toc-q-item';
       a.dataset.qid = q.id;
       a.href = '#q-' + q.id;
-      a.innerHTML = `<span class="toc-dot"></span><span class="toc-qid">${escHtml(q.id)}</span>`;
+      const titleStr = plainText(q.title);
+      const maxLen = appSettings.toc?.title_max_length ?? 40;
+      const truncated = titleStr.length > maxLen ? titleStr.slice(0, maxLen - 2).trimEnd() + '…' : titleStr;
+      a.innerHTML = `<span class="toc-dot"></span><span class="toc-qid">${escHtml(q.id)}</span><span class="toc-qtitle" title="${escHtml(titleStr)}">${escHtml(truncated)}</span>`;
       a.addEventListener('click', e => {
         e.preventDefault();
         document.getElementById('q-' + q.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1258,7 +1291,7 @@ function clearAll() {
   getAllQids().forEach(qid => updateConfirmPill(qid));
   updateProgress();
   updateDownloadBtn();
-  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(getStorageKey());
   clearTimeout(saveTimer);
   _suppressSave = true;
 
@@ -1325,4 +1358,4 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 3200);
 }
 
-loadQuestionnaire();
+loadSettings().then(loadQuestionnaire);

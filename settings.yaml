@@ -1,0 +1,47 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# QuestionnaireHelper — settings.yaml
+#
+# This file configures the questionnaire app.
+# All settings are optional — the app works with sensible defaults if this
+# file is absent or partially filled.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Default questionnaire ─────────────────────────────────────────────────────
+# The YAML file to load when no ?yaml= URL parameter is provided.
+# Path is relative to the server root (same directory as questionnaire.html).
+default_yaml: example.yaml
+
+# ── Table of contents ────────────────────────────────────────────────────────
+toc:
+  # Maximum number of characters shown for each question title in the TOC.
+  # Longer titles are truncated with '…'. Range: 10–120. Default: 40.
+  title_max_length: 40
+
+# ── Cosmetic / branding ───────────────────────────────────────────────────────
+theme:
+  # Primary brand colour (used for headers, active states, links).
+  # Any valid CSS colour: hex, rgb(), hsl(), or a named colour.
+  primary_color: "#1a3a6b"
+
+  # Accent colour for the header gradient.
+  accent_color: "#2d5a9e"
+
+  # Font family applied to the whole page.
+  # Use a Google Fonts name or a system font stack.
+  font_family: "'Segoe UI', system-ui, -apple-system, sans-serif"
+
+  # Border radius for cards and input elements (e.g. "8px", "4px", "16px").
+  border_radius: "10px"
+
+# ── Behaviour ─────────────────────────────────────────────────────────────────
+behaviour:
+  # Auto-save debounce delay in milliseconds.
+  # Lower = more frequent saves; higher = fewer writes. Default: 800.
+  autosave_delay_ms: 800
+
+  # Show the restore-draft banner when returning to a previously saved session.
+  show_restore_banner: true
+
+  # Require all questions to be answered+confirmed (or skipped) before
+  # enabling the Download button. Set to false to allow partial downloads.
+  require_complete: true
