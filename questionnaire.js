@@ -15,6 +15,7 @@ async function loadSettings() {
     if (resp.ok) appSettings = jsyaml.load(await resp.text()) || {};
   } catch { /* settings.yaml is optional */ }
   applyTheme(appSettings.theme || {});
+  await resolveYamlUrl();
 }
 
 function applyTheme(theme) {
@@ -27,13 +28,50 @@ function applyTheme(theme) {
 
 // ── YAML source & storage key ──────────────────────────────────────────────
 const _urlParam = new URLSearchParams(location.search).get('yaml');
-// yamlUrl is resolved after settings load; use a getter so it stays reactive
-let _resolvedYamlUrl = null;
-function getYamlUrl() {
-  if (_resolvedYamlUrl) return _resolvedYamlUrl;
-  _resolvedYamlUrl = _urlParam || appSettings.default_yaml || 'questionnaire.yaml';
-  return _resolvedYamlUrl;
+let _resolvedYamlUrl = null;  // set once by resolveYamlUrl()
+
+/**
+ * Resolve a path (possibly containing "..") relative to the current page URL.
+ * Browsers normalise fetch URLs, so "../foo.yaml" from a sub-path correctly
+ * reaches the parent directory on the server.
+ */
+function resolveRelativePath(p) {
+  return new URL(p, location.href).href;
 }
+
+/**
+ * If ?yaml= is given, use it directly.
+ * Otherwise, try each path in default_yaml (a list) in order and return the
+ * first one that the server answers with HTTP 200.
+ * Falls back to 'example.yaml' if nothing works.
+ */
+async function resolveYamlUrl() {
+  if (_urlParam) {
+    _resolvedYamlUrl = resolveRelativePath(_urlParam);
+    return;
+  }
+
+  let candidates = appSettings.default_yaml;
+  if (!candidates) {
+    candidates = ['../questionnaire.yaml', 'questionnaire.yaml', 'example.yaml'];
+  } else if (typeof candidates === 'string') {
+    candidates = [candidates];
+  }
+
+  for (const p of candidates) {
+    try {
+      const url = resolveRelativePath(p);
+      const resp = await fetch(url, { method: 'HEAD' });
+      if (resp.ok) { _resolvedYamlUrl = url; return; }
+    } catch { /* network error — try next */ }
+  }
+
+  // Nothing found — fall through to the last candidate so loadQuestionnaire()
+  // can show a meaningful "not found" error rather than silently doing nothing.
+  _resolvedYamlUrl = resolveRelativePath(candidates[candidates.length - 1]);
+}
+
+function getYamlUrl() { return _resolvedYamlUrl || 'example.yaml'; }
 
 // Storage key is keyed to the yaml file so different questionnaires don't share state
 function getStorageKey() {

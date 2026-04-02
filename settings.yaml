@@ -7,9 +7,14 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Default questionnaire ─────────────────────────────────────────────────────
-# The YAML file to load when no ?yaml= URL parameter is provided.
-# Path is relative to the server root (same directory as questionnaire.html).
-default_yaml: example.yaml
+# Ordered list of YAML files to try when no ?yaml= URL parameter is provided.
+# The app fetches each path in order and uses the first one that exists (HTTP 200).
+# Paths starting with "../" resolve to the parent directory of questionnaire.html,
+# making it easy to keep your questionnaire one level above the helper files.
+default_yaml:
+  - "../questionnaire.yaml"   # parent directory — place your survey here
+  - "questionnaire.yaml"      # same directory as questionnaire.html
+  - "example.yaml"            # built-in demo fallback
 
 # ── Table of contents ────────────────────────────────────────────────────────
 toc:

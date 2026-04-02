@@ -11,6 +11,11 @@ const path = require('path');
 const PORT = parseInt(process.argv[2] || '4000', 10);
 const ROOT = __dirname;
 
+// Allow serving files from one level above ROOT so that paths like
+// "../questionnaire.yaml" (listed in settings.yaml default_yaml) can be resolved.
+// Files outside the parent directory are still blocked.
+const ALLOWED_ROOT = path.resolve(ROOT, '..');
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.css':  'text/css; charset=utf-8',
@@ -26,8 +31,8 @@ http.createServer((req, res) => {
   const urlPath = req.url.split('?')[0];
   const filePath = path.join(ROOT, urlPath === '/' ? 'index.html' : urlPath);
 
-  // Prevent path traversal outside ROOT
-  if (!filePath.startsWith(ROOT)) {
+  // Allow files within ROOT or one level above (for ../questionnaire.yaml etc.)
+  if (!filePath.startsWith(ALLOWED_ROOT)) {
     res.writeHead(403); res.end('Forbidden'); return;
   }
 
