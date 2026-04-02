@@ -109,6 +109,25 @@ function plainText(val) {
   return '';
 }
 
+// truncatedTxt(val, maxLen): like txt() but truncates each language string to maxLen chars
+function truncatedTxt(val, maxLen) {
+  const truncate = s => s.length > maxLen ? s.slice(0, maxLen - 2).trimEnd() + '…' : s;
+  if (typeof val === 'string') return escHtml(truncate(val));
+  if (val && typeof val === 'object') {
+    return Object.entries(val)
+      .map(([lang, s]) => `<span class="${escHtml(lang)}-only">${escHtml(truncate(s))}</span>`)
+      .join('');
+  }
+  return '';
+}
+
+// allPlainText(val): join all language values with ' / ' (used for title= tooltip)
+function allPlainText(val) {
+  if (typeof val === 'string') return val;
+  if (val && typeof val === 'object') return Object.values(val).join(' / ');
+  return '';
+}
+
 // ── Answer presence helper ─────────────────────────────────────────────────
 function isAnswered(qid) {
   const v = answers[qid];
@@ -942,10 +961,10 @@ function buildToc() {
       a.className = 'toc-q-item';
       a.dataset.qid = q.id;
       a.href = '#q-' + q.id;
-      const titleStr = plainText(q.title);
       const maxLen = appSettings.toc?.title_max_length ?? 40;
-      const truncated = titleStr.length > maxLen ? titleStr.slice(0, maxLen - 2).trimEnd() + '…' : titleStr;
-      a.innerHTML = `<span class="toc-dot"></span><span class="toc-qid">${escHtml(q.id)}</span><span class="toc-qtitle" title="${escHtml(titleStr)}">${escHtml(truncated)}</span>`;
+      const tooltip = escHtml(allPlainText(q.title));
+      const titleHtml = truncatedTxt(q.title, maxLen);
+      a.innerHTML = `<span class="toc-dot"></span><span class="toc-qid">${escHtml(q.id)}</span><span class="toc-qtitle" title="${tooltip}">${titleHtml}</span>`;
       a.addEventListener('click', e => {
         e.preventDefault();
         document.getElementById('q-' + q.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
