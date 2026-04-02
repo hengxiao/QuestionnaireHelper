@@ -676,6 +676,13 @@ body.lang-both .prompts ul li .zh-only { display: block; }
 .confirm-pill { color: var(--text-muted); }
 .confirm-pill:hover:not(.disabled) { border-color: var(--green); color: var(--green); }
 .confirm-pill input { accent-color: var(--green); }
+
+/* Toggle label: "Confirm" when unchecked, "✓ Confirmed" when checked */
+.confirm-pill .pill-checked   { display: none; }
+.confirm-pill .pill-unchecked { display: inline; }
+.confirm-pill:has(input:checked) .pill-checked   { display: inline; }
+.confirm-pill:has(input:checked) .pill-unchecked { display: none; }
+
 .is-confirmed .confirm-pill {
   border-color: var(--green-border);
   background: var(--green-bg);

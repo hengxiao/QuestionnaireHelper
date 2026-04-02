@@ -673,8 +673,8 @@ function renderQuestion(q) {
       <label class="pill-label confirm-pill disabled" id="confirm-label-${escHtml(q.id)}"
              title="Write an answer first / 请先填写答案">
         <input type="checkbox" id="confirm-${escHtml(q.id)}" data-qid="${escHtml(q.id)}" onchange="onConfirmChange(this)" />
-        <span class="en-only">✓ Confirmed</span>
-        <span class="zh-only">✓ 已确认</span>
+        <span class="en-only"><span class="pill-unchecked">Confirm</span><span class="pill-checked">✓ Confirmed</span></span>
+        <span class="zh-only"><span class="pill-unchecked">确认</span><span class="pill-checked">✓ 已确认</span></span>
       </label>
       <span class="pill-hint" id="confirm-hint-${escHtml(q.id)}">
         <span class="en-only">Write an answer first</span>
